@@ -2,9 +2,18 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthModule } from './modules/health/health.module';
+import { envSchema } from './config/env.schema';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [HealthModule],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
+      validate: (config) => envSchema.parse(config),
+    }),
+    HealthModule
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
