@@ -12,7 +12,7 @@ export const envSchema = z
             .default('development'),
         PORT: z.coerce.number().int().min(1).max(65535).default(3000),
         FRONTEND_ORIGIN: z.url().default('http://localhost:5173'),
-        DATABASE_URL: opt,
+        DATABASE_URL: z.url(),
         JWT_ACCESS_SECRET: opt,
         JWT_REFRESH_SECRET: opt,
         JWT_ACCESS_TTL: z.string().default('15m'),

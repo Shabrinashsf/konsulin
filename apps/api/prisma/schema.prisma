@@ -1,0 +1,329 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enum ───
+
+enum UserRole {
+  student
+  lecturer
+
+  @@map("user_role")
+}
+
+enum ProjectType {
+  s1_thesis_proposal
+  s1_thesis
+  s2_thesis_proposal
+  s2_thesis
+  s3_dissertation_proposal
+  s3_dissertation
+  research
+  publication
+  competition
+  external_project
+
+  @@map("project_type")
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+  revoked
+
+  @@map("invitation_status")
+}
+
+enum ConsultationStatus {
+  requested
+  approved
+  rejected
+  completed
+  cancelled
+
+  @@map("consultation_status")
+}
+
+enum ConsultationMode {
+  offline
+  online
+
+  @@map("consultation_mode")
+}
+
+enum StorageDriver {
+  local
+  r2
+
+  @@map("storage_driver")
+}
+
+enum RevisionItemStatus {
+  open
+  addressed
+  verified
+  reopened
+
+  @@map("revision_item_status")
+}
+
+// ─── Master data & identitas ───
+
+model StudyProgram {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String @unique(map: "study_programs_name_uq") @db.VarChar(150)
+
+  students User[]
+
+  @@map("study_programs")
+}
+
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String    @db.VarChar(255)
+  password       String    @db.VarChar(255)
+  name           String    @db.VarChar(150)
+  role           UserRole
+  nrp            String?   @db.VarChar(30)
+  studyProgramId String?   @map("study_program_id") @db.Uuid
+  cohortYear     Int?      @map("cohort_year") @db.SmallInt
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  studyProgram StudyProgram? @relation(fields: [studyProgramId], references: [id])
+
+  refreshTokens         RefreshToken[]
+  ownedProjects         Project[]           @relation("ProjectLecturer")
+  memberships           ProjectMember[]
+  invitations           ProjectInvitation[]
+  officeHours           OfficeHour[]
+  blackoutDates         BlackoutDate[]
+  lecturerConsultations Consultation[]      @relation("ConsultationLecturer")
+  studentConsultations  Consultation[]      @relation("ConsultationStudent")
+  trackFolders          SubmissionFolder[]  @relation("FolderStudent")
+  createdFolders        SubmissionFolder[]  @relation("FolderCreator")
+  uploadedVersions      SubmissionVersion[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── Project ───
+
+model Project {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lecturerId  String      @map("lecturer_id") @db.Uuid
+  title       String      @db.VarChar(200)
+  description String?
+  type        ProjectType
+  startDate   DateTime?   @map("start_date") @db.Date
+  endDate     DateTime?   @map("end_date") @db.Date
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(6)
+
+  lecturer User @relation("ProjectLecturer", fields: [lecturerId], references: [id])
+
+  members           ProjectMember[]
+  invitations       ProjectInvitation[]
+  consultations     Consultation[]
+  submissionFolders SubmissionFolder[]
+
+  @@index([lecturerId])
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId String   @map("project_id") @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id])
+  student User    @relation(fields: [studentId], references: [id])
+
+  @@id([projectId, studentId])
+  @@index([studentId])
+  @@map("project_members")
+}
+
+model ProjectInvitation {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId   String           @map("project_id") @db.Uuid
+  studentId   String           @map("student_id") @db.Uuid
+  status      InvitationStatus @default(pending)
+  expiresAt   DateTime         @map("expires_at") @db.Timestamptz(6)
+  respondedAt DateTime?        @map("responded_at") @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id])
+  student User    @relation(fields: [studentId], references: [id])
+
+  @@index([studentId, status])
+  @@map("project_invitations")
+}
+
+// ─── Jadwal dosen ───
+
+model OfficeHour {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lecturerId      String   @map("lecturer_id") @db.Uuid
+  dayOfWeek       Int      @map("day_of_week") @db.SmallInt
+  startTime       DateTime @map("start_time") @db.Time(6)
+  endTime         DateTime @map("end_time") @db.Time(6)
+  slotMinutes     Int      @map("slot_minutes") @db.SmallInt /// 15 | 30 | 45 | 60
+  defaultLocation String?  @map("default_location") @db.VarChar(255)
+
+  lecturer User @relation(fields: [lecturerId], references: [id])
+
+  @@index([lecturerId, dayOfWeek])
+  @@map("office_hours")
+}
+
+model BlackoutDate {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lecturerId String   @map("lecturer_id") @db.Uuid
+  date       DateTime @db.Date
+  reason     String?  @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lecturer User @relation(fields: [lecturerId], references: [id])
+
+  @@unique([lecturerId, date], map: "blackout_uq")
+  @@map("blackout_dates")
+}
+
+// ─── Bimbingan & logbook ───
+
+model Consultation {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId      String             @map("project_id") @db.Uuid
+  lecturerId     String             @map("lecturer_id") @db.Uuid
+  studentId      String             @map("student_id") @db.Uuid
+  status         ConsultationStatus @default(requested)
+  mode           ConsultationMode
+  topic          String             @db.VarChar(200)
+  agenda         String?
+  startAt        DateTime           @map("start_at") @db.Timestamptz(6)
+  endAt          DateTime           @map("end_at") @db.Timestamptz(6)
+  location       String?            @db.VarChar(255)
+  statusReason   String?            @map("status_reason")
+  summary        String?
+  icsSequence    Int                @default(0) @map("ics_sequence")
+  reminderSentAt DateTime?          @map("reminder_sent_at") @db.Timestamptz(6)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  project  Project @relation(fields: [projectId], references: [id])
+  lecturer User    @relation("ConsultationLecturer", fields: [lecturerId], references: [id])
+  student  User    @relation("ConsultationStudent", fields: [studentId], references: [id])
+
+  @@index([lecturerId, startAt], map: "consultations_lecturer_start")
+  @@index([projectId, status], map: "consultations_project_status")
+  @@index([studentId])
+  @@map("consultations")
+}
+
+// ─── Submission ───
+
+model SubmissionFolder {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  studentId   String?   @map("student_id") @db.Uuid
+  createdBy   String    @map("created_by") @db.Uuid
+  title       String    @db.VarChar(200)
+  description String?
+  deadlineAt  DateTime? @map("deadline_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id])
+  student User?   @relation("FolderStudent", fields: [studentId], references: [id])
+  creator User    @relation("FolderCreator", fields: [createdBy], references: [id])
+
+  versions SubmissionVersion[]
+
+  @@index([projectId, studentId])
+  @@map("submission_folders")
+}
+
+model SubmissionVersion {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  folderId      String        @map("folder_id") @db.Uuid
+  uploadedBy    String        @map("uploaded_by") @db.Uuid
+  versionNumber Int           @map("version_number")
+  note          String?
+  originalName  String        @map("original_name") @db.VarChar(255)
+  storageDriver StorageDriver @map("storage_driver")
+  storedKey     String        @map("stored_key") @db.VarChar(512)
+  mimeType      String        @map("mime_type") @db.VarChar(127)
+  sizeBytes     BigInt        @map("size_bytes")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  folder   SubmissionFolder @relation(fields: [folderId], references: [id])
+  uploader User             @relation(fields: [uploadedBy], references: [id])
+
+  feedbacks              Feedback[]
+  addressedRevisionItems RevisionItem[]
+
+  @@unique([folderId, versionNumber], map: "version_number_uq")
+  @@map("submission_versions")
+}
+
+// ─── Feedback & revisi ───
+
+model Feedback {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  versionId String   @map("version_id") @db.Uuid
+  content   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  version SubmissionVersion @relation(fields: [versionId], references: [id])
+
+  revisionItems RevisionItem[]
+
+  @@index([versionId])
+  @@map("feedbacks")
+}
+
+model RevisionItem {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  feedbackId           String             @map("feedback_id") @db.Uuid
+  position             Int                @db.SmallInt
+  description          String
+  status               RevisionItemStatus @default(open)
+  addressedInVersionId String?            @map("addressed_in_version_id") @db.Uuid
+  addressedNote        String?            @map("addressed_note")
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  feedback           Feedback           @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  addressedInVersion SubmissionVersion? @relation(fields: [addressedInVersionId], references: [id])
+
+  @@index([feedbackId])
+  @@index([status], map: "revision_items_status")
+  @@map("revision_items")
+}
