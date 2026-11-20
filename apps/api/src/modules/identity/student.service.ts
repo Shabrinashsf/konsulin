@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginate } from '../../shared/http/pagination-query.dto';
-import { degreeNameFilter, degreeOf } from './degree';
+import { degreeNameFilter, withDegree } from './degree';
 import { StudentQueryDto } from './dto/student-query.dto';
 
 @Injectable()
@@ -43,7 +43,7 @@ export class StudentService {
         ]);
         const items = rows.map(({ studyProgram: sp, ...s }) => ({
             ...s,
-            studyProgram: sp && { ...sp, degree: degreeOf(sp.name) },
+            studyProgram: withDegree(sp),
         }));
         return paginate(items, total, q);
     }

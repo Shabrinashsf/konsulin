@@ -14,3 +14,6 @@ export function degreeOf(programName: string): Degree {
 export const degreeNameFilter = (degree: Degree) => ({
     startsWith: `${degree} `,
 });
+
+export const withDegree = <T extends { name: string }>(sp: T | null) =>
+    sp && { ...sp, degree: degreeOf(sp.name) };

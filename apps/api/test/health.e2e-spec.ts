@@ -1,10 +1,12 @@
 import { Controller, Get, INestApplication, Query } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { Public } from '../src/shared/auth/auth.decorators';
 import { PaginationQueryDto } from '../src/shared/http/pagination-query.dto';
 import { createTestApp } from './utils/create-test-app';
 
 // Controller for test to make sure the global ValidationPipe is active.
+@Public()
 @Controller('test-validation')
 class ValidationProbeController {
     @Get()
