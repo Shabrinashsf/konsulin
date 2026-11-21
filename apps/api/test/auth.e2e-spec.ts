@@ -1,18 +1,18 @@
 import { INestApplication } from '@nestjs/common';
-import { getStorageToken, ThrottlerStorageService } from '@nestjs/throttler';
-import * as argon2 from 'argon2';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './utils/create-test-app';
-
-const PASSWORD = 'Rahasia123';
-
-type Res = request.Response;
-const dataOf = (res: Res) => (res.body as { data: unknown }).data;
-const codeOf = (res: Res) => (res.body as { code?: string }).code;
-const tokenOf = (res: Res) =>
-    (res.body as { data: { accessToken: string } }).data.accessToken;
+import {
+    codeOf,
+    dataOf,
+    login as loginWith,
+    PASSWORD,
+    refreshCookieOf,
+    resetState,
+    tokenOf,
+    upsertProgram,
+} from './utils/fixtures';
 
 describe('Auth (e2e)', () => {
     let app: INestApplication<App>;
@@ -29,122 +29,173 @@ describe('Auth (e2e)', () => {
         cohortYear: 2021,
         ...over,
     });
-
+    const register = (over: Record<string, unknown> = {}) =>
+        http().post('/api/v1/auth/register').send(registerBody(over));
     const login = (email: string, password = PASSWORD) =>
-        http().post('/api/v1/auth/login').send({ email, password });
-
-    const refreshCookieOf = (res: request.Response) => {
-        const raw = res.headers['set-cookie'] as unknown as string[];
-        return raw.find((c) => c.startsWith('refresh_token='))!.split(';')[0];
-    };
+        loginWith(app, email, password);
+    const softDelete = (email: string) =>
+        prisma.user.updateMany({
+            where: { email },
+            data: { deletedAt: new Date() },
+        });
 
     beforeAll(async () => {
         app = await createTestApp();
         prisma = app.get(PrismaService);
-        const program = await prisma.studyProgram.upsert({
-            where: { name: 'S1 Teknik Informatika' },
-            update: {},
-            create: { name: 'S1 Teknik Informatika' },
-        });
-        programId = program.id;
+        programId = (await upsertProgram(prisma, 'S1 Teknik Informatika')).id;
     });
 
-    beforeEach(async () => {
-        await prisma.$executeRaw`TRUNCATE users CASCADE`;
-        const throttle = app.get<ThrottlerStorageService>(getStorageToken());
-        throttle.storage.clear();
-        (
-            throttle as unknown as { hitExpirations: Map<string, unknown> }
-        ).hitExpirations.clear();
-    });
+    beforeEach(() => resetState(app));
 
     afterAll(async () => {
         await app.close();
     });
 
     describe('POST /auth/register', () => {
-        it('201 → profil mahasiswa tanpa password', async () => {
-            const res = await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody({ email: '  Budi@Example.com ' }))
-                .expect(201);
+        it('201 → profil mahasiswa tanpa password, nama & email dinormalisasi', async () => {
+            const res = await register({
+                name: '  Budi Mahasiswa ',
+                email: '  Budi@Example.com ',
+            }).expect(201);
             const data = dataOf(res);
-            expect(data).toMatchObject({
+            expect(data).toEqual({
+                id: expect.any(String) as string,
+                name: 'Budi Mahasiswa',
                 email: 'budi@example.com',
                 role: 'student',
-                studyProgram: { id: programId, degree: 'S1' },
+                nrp: '5025211001',
+                cohortYear: 2021,
+                studyProgram: {
+                    id: programId,
+                    name: 'S1 Teknik Informatika',
+                    degree: 'S1',
+                },
             });
-            expect(data).not.toHaveProperty('password');
             const stored = await prisma.user.findFirstOrThrow();
             expect(stored.password).toMatch(/^\$argon2id\$/);
         });
 
+        it('tidak memerlukan token (publik)', async () => {
+            await register().expect(201);
+        });
+
         it('email atau NRP duplikat → 409', async () => {
-            await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody())
-                .expect(201);
-            const email = await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody({ nrp: '5025211002' }))
-                .expect(409);
+            await register().expect(201);
+            const email = await register({
+                nrp: '5025211002',
+                email: 'BUDI@example.com',
+            }).expect(409);
             expect(codeOf(email)).toBe('EMAIL_TAKEN');
-            const nrp = await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody({ email: 'lain@example.com' }))
-                .expect(409);
+            const nrp = await register({ email: 'lain@example.com' }).expect(
+                409,
+            );
             expect(codeOf(nrp)).toBe('NRP_TAKEN');
         });
 
-        it.each([
-            ['password lemah', { password: 'lemahsekali' }],
-            ['NRP bukan 10 digit', { nrp: '12345' }],
-            ['angkatan < 2000', { cohortYear: 1999 }],
-            ['angkatan di masa depan', { cohortYear: 9999 }],
-            ['field tak dikenal (role)', { role: 'lecturer' }],
-        ])('%s → 400', async (_, over) => {
-            await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody(over))
-                .expect(400);
+        it('email & NRP milik akun yang sudah dihapus boleh dipakai lagi', async () => {
+            await register().expect(201);
+            await softDelete('budi@example.com');
+            await register().expect(201);
         });
 
-        it('prodi tidak ada → 400', async () => {
-            const res = await http()
-                .post('/api/v1/auth/register')
-                .send(
-                    registerBody({
-                        studyProgramId: '00000000-0000-4000-8000-000000000000',
-                    }),
-                )
-                .expect(400);
+        it.each([
+            ['nama < 3 karakter', { name: 'Bu' }],
+            ['nama > 100 karakter', { name: 'a'.repeat(101) }],
+            ['NRP bukan 10 digit', { nrp: '12345' }],
+            ['NRP mengandung huruf', { nrp: '50252110ab' }],
+            ['email tidak valid', { email: 'bukan-email' }],
+            ['password < 8 karakter', { password: 'Ab1' }],
+            ['password tanpa huruf besar', { password: 'rahasia123' }],
+            ['password tanpa huruf kecil', { password: 'RAHASIA123' }],
+            ['password tanpa angka', { password: 'RahasiaSekali' }],
+            ['prodi bukan UUID', { studyProgramId: 'abc' }],
+            ['angkatan < 2000', { cohortYear: 1999 }],
+            ['angkatan di masa depan', { cohortYear: 9999 }],
+            ['angkatan bukan bilangan bulat', { cohortYear: 2021.5 }],
+            ['field tak dikenal (role)', { role: 'lecturer' }],
+        ])('%s → 400', async (_, over) => {
+            await register(over).expect(400);
+            await resetState(app);
+        });
+
+        it('field wajib kosong → 400', async () => {
+            await http().post('/api/v1/auth/register').send({}).expect(400);
+        });
+
+        it('angkatan tahun berjalan (Asia/Jakarta) → 201', async () => {
+            const year = Number(
+                new Date()
+                    .toLocaleDateString('sv-SE', {
+                        timeZone: 'Asia/Jakarta',
+                    })
+                    .slice(0, 4),
+            );
+            await register({ cohortYear: year }).expect(201);
+        });
+
+        it('prodi tidak ada → 400 STUDY_PROGRAM_NOT_FOUND', async () => {
+            const res = await register({
+                studyProgramId: '00000000-0000-4000-8000-000000000000',
+            }).expect(400);
             expect(codeOf(res)).toBe('STUDY_PROGRAM_NOT_FOUND');
+        });
+
+        it('register ke-6 dalam semenit → 429', async () => {
+            for (let i = 0; i < 5; i++) {
+                await register({ nrp: '12345' }).expect(400);
+            }
+            await register().expect(429);
         });
     });
 
-    describe('login, me, refresh, logout', () => {
+    describe('POST /auth/login', () => {
         beforeEach(async () => {
-            await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody())
-                .expect(201);
+            await register().expect(201);
         });
 
-        it('login → access token + cookie refresh httpOnly', async () => {
+        it('200 → access token + cookie refresh httpOnly 7 hari', async () => {
             const res = await login('budi@example.com').expect(200);
-            expect(tokenOf(res)).toEqual(expect.any(String));
+            expect(dataOf(res)).toEqual({
+                accessToken: expect.any(String) as string,
+            });
             const cookie = (
                 res.headers['set-cookie'] as unknown as string[]
             ).join();
             expect(cookie).toMatch(/refresh_token=/);
             expect(cookie).toMatch(/HttpOnly/);
+            expect(cookie).toMatch(/Secure/);
             expect(cookie).toMatch(/SameSite=Strict/);
             expect(cookie).toMatch(/Path=\/api\/v1\/auth/);
+
+            const row = await prisma.refreshToken.findFirstOrThrow();
+            const days = (row.expiresAt.getTime() - Date.now()) / 86_400_000;
+            expect(days).toBeGreaterThan(6.99);
+            expect(days).toBeLessThanOrEqual(7);
+            expect(cookie).not.toContain(row.tokenHash);
         });
 
-        it('password salah / email tak terdaftar → 401', async () => {
-            await login('budi@example.com', 'Salah1234').expect(401);
-            await login('tidakada@example.com').expect(401);
+        it('email tidak case-sensitive', async () => {
+            await login('BUDI@Example.com').expect(200);
+        });
+
+        it('password salah / email tak terdaftar → 401 dengan pesan sama', async () => {
+            const wrong = await login('budi@example.com', 'Salah1234').expect(
+                401,
+            );
+            const unknown = await login('tidakada@example.com').expect(401);
+            expect(wrong.body).toEqual(unknown.body);
+        });
+
+        it('body tidak valid → 400', async () => {
+            await http()
+                .post('/api/v1/auth/login')
+                .send({ email: 'bukan-email', password: '' })
+                .expect(400);
+        });
+
+        it('akun ber-deleted_at → 401', async () => {
+            await softDelete('budi@example.com');
+            await login('budi@example.com').expect(401);
         });
 
         it('login ke-6 dalam semenit → 429', async () => {
@@ -153,47 +204,86 @@ describe('Auth (e2e)', () => {
             }
             await login('budi@example.com').expect(429);
         });
+    });
 
-        it('GET /auth/me dengan token → profil; tanpa token → 401', async () => {
-            const token = tokenOf(await login('budi@example.com'));
-            const me = await http()
-                .get('/api/v1/auth/me')
-                .set('Authorization', `Bearer ${token}`)
-                .expect(200);
-            expect(dataOf(me)).toMatchObject({ nrp: '5025211001' });
-            await http().get('/api/v1/auth/me').expect(401);
-            await http()
-                .get('/api/v1/auth/me')
-                .set('Authorization', 'Bearer bukan.token.valid')
-                .expect(401);
+    describe('POST /auth/refresh', () => {
+        beforeEach(async () => {
+            await register().expect(201);
         });
 
-        it('refresh merotasi token; token lama dipakai ulang → 401 & semua sesi dicabut', async () => {
-            const old = refreshCookieOf(await login('budi@example.com'));
+        it('merotasi token → access token & cookie baru, token lama dicabut', async () => {
+            const old = refreshCookieOf(await login('budi@example.com'))!;
+            const res = await http()
+                .post('/api/v1/auth/refresh')
+                .set('Cookie', old)
+                .expect(200);
+            expect(tokenOf(res)).toEqual(expect.any(String));
+            const fresh = refreshCookieOf(res);
+            expect(fresh).toBeDefined();
+            expect(fresh).not.toBe(old);
+            expect(
+                await prisma.refreshToken.count({ where: { revokedAt: null } }),
+            ).toBe(1);
+        });
+
+        it('token lama dipakai ulang → 401 & semua sesi user dicabut', async () => {
+            const old = refreshCookieOf(await login('budi@example.com'))!;
+            const other = refreshCookieOf(await login('budi@example.com'))!;
             const rotated = await http()
                 .post('/api/v1/auth/refresh')
                 .set('Cookie', old)
                 .expect(200);
-            const fresh = refreshCookieOf(rotated);
-            expect(fresh).not.toBe(old);
+            const fresh = refreshCookieOf(rotated)!;
 
             await http()
                 .post('/api/v1/auth/refresh')
                 .set('Cookie', old)
                 .expect(401);
+            for (const c of [fresh, other]) {
+                await http()
+                    .post('/api/v1/auth/refresh')
+                    .set('Cookie', c)
+                    .expect(401);
+            }
+        });
+
+        it('tanpa cookie / token asal → 401', async () => {
+            await http().post('/api/v1/auth/refresh').expect(401);
             await http()
                 .post('/api/v1/auth/refresh')
-                .set('Cookie', fresh)
+                .set('Cookie', 'refresh_token=ngawur')
                 .expect(401);
         });
 
-        it('refresh tanpa cookie → 401', async () => {
-            await http().post('/api/v1/auth/refresh').expect(401);
+        it('token kedaluwarsa → 401', async () => {
+            const cookie = refreshCookieOf(await login('budi@example.com'))!;
+            await prisma.refreshToken.updateMany({
+                data: { expiresAt: new Date(Date.now() - 1000) },
+            });
+            await http()
+                .post('/api/v1/auth/refresh')
+                .set('Cookie', cookie)
+                .expect(401);
         });
 
-        it('logout → 204, cookie dihapus, refresh token tak bisa dipakai', async () => {
+        it('akun ber-deleted_at → 401', async () => {
+            const cookie = refreshCookieOf(await login('budi@example.com'))!;
+            await softDelete('budi@example.com');
+            await http()
+                .post('/api/v1/auth/refresh')
+                .set('Cookie', cookie)
+                .expect(401);
+        });
+    });
+
+    describe('POST /auth/logout', () => {
+        beforeEach(async () => {
+            await register().expect(201);
+        });
+
+        it('204 → cookie dihapus, refresh token tak bisa dipakai', async () => {
             const res = await login('budi@example.com');
-            const cookie = refreshCookieOf(res);
+            const cookie = refreshCookieOf(res)!;
             const out = await http()
                 .post('/api/v1/auth/logout')
                 .set('Authorization', `Bearer ${tokenOf(res)}`)
@@ -207,40 +297,59 @@ describe('Auth (e2e)', () => {
                 .set('Cookie', cookie)
                 .expect(401);
         });
+
+        it('tanpa cookie tetap 204', async () => {
+            const token = tokenOf(await login('budi@example.com'));
+            await http()
+                .post('/api/v1/auth/logout')
+                .set('Authorization', `Bearer ${token}`)
+                .expect(204);
+        });
+
+        it('tanpa access token → 401', async () => {
+            await http().post('/api/v1/auth/logout').expect(401);
+        });
     });
 
-    describe('GET /students (role)', () => {
-        it('mahasiswa → 403, dosen → 200', async () => {
-            await http()
-                .post('/api/v1/auth/register')
-                .send(registerBody())
-                .expect(201);
-            await prisma.user.create({
-                data: {
-                    name: 'Dosen Satu',
-                    email: 'dosen@example.com',
-                    role: 'lecturer',
-                    password: await argon2.hash(PASSWORD),
-                },
-            });
-            const student = await login('budi@example.com');
-            const lecturer = await login('dosen@example.com');
+    describe('GET /auth/me', () => {
+        beforeEach(async () => {
+            await register().expect(201);
+        });
 
-            await http()
-                .get('/api/v1/students')
-                .set('Authorization', `Bearer ${tokenOf(student)}`)
-                .expect(403);
+        it('200 → profil user login tanpa password', async () => {
+            const token = tokenOf(await login('budi@example.com'));
             const res = await http()
-                .get('/api/v1/students?degree=S1')
-                .set('Authorization', `Bearer ${tokenOf(lecturer)}`)
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Bearer ${token}`)
                 .expect(200);
-            expect((res.body as { meta: { total: number } }).meta.total).toBe(
-                1,
-            );
-            expect((dataOf(res) as unknown[])[0]).toMatchObject({
+            expect(dataOf(res)).toMatchObject({
+                email: 'budi@example.com',
                 nrp: '5025211001',
                 studyProgram: { degree: 'S1' },
             });
+            expect(dataOf(res)).not.toHaveProperty('password');
+        });
+
+        it('tanpa token / token tidak valid / skema bukan Bearer → 401', async () => {
+            const token = tokenOf(await login('budi@example.com'));
+            await http().get('/api/v1/auth/me').expect(401);
+            await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', 'Bearer bukan.token.valid')
+                .expect(401);
+            await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Basic ${token}`)
+                .expect(401);
+        });
+
+        it('akun ber-deleted_at → 401 walau access token masih berlaku', async () => {
+            const token = tokenOf(await login('budi@example.com'));
+            await softDelete('budi@example.com');
+            await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Bearer ${token}`)
+                .expect(401);
         });
     });
 });
