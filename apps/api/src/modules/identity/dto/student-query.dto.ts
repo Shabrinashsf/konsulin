@@ -4,9 +4,29 @@ import { PaginationQueryDto } from '../../../shared/http/pagination-query.dto';
 import { DEGREES, type Degree } from '../degree';
 
 export class StudentQueryDto extends PaginationQueryDto {
-    @IsOptional() @IsString() q?: string;
-    @IsOptional() @IsUUID() studyProgramId?: string;
-    @IsOptional() @IsIn(DEGREES) degree?: Degree;
-    @IsOptional() @Type(() => Number) @IsInt() cohortYear?: number;
-    @IsOptional() @IsUUID() eligibleForProjectId?: string;
+    // name or nrp
+    @IsOptional()
+    @IsString()
+    q?: string;
+
+    // study program
+    @IsOptional()
+    @IsUUID()
+    studyProgramId?: string;
+
+    // degree
+    @IsOptional()
+    @IsIn(DEGREES)
+    degree?: Degree;
+
+    // cohort
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    cohortYear?: number;
+
+    // degree must match the project and the student is not a member yet
+    @IsOptional()
+    @IsUUID()
+    eligibleForProjectId?: string;
 }

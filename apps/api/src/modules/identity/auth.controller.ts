@@ -36,6 +36,7 @@ const refreshCookie = (req: Request) =>
 export class AuthController {
     constructor(private readonly auth: AuthService) {}
 
+    // -- POST /auth/register
     @Public()
     @Throttle(AUTH_THROTTLE)
     @Post('register')
@@ -43,6 +44,7 @@ export class AuthController {
         return this.auth.register(dto);
     }
 
+    // -- POST /auth/login
     @Public()
     @Throttle(AUTH_THROTTLE)
     @Post('login')
@@ -54,6 +56,7 @@ export class AuthController {
         return this.sendTokens(res, await this.auth.login(dto));
     }
 
+    // -- POST /auth/refresh
     @Public()
     @Post('refresh')
     @HttpCode(200)
@@ -67,6 +70,7 @@ export class AuthController {
         );
     }
 
+    // -- POST /auth/logout
     @ApiBearerAuth()
     @Post('logout')
     @HttpCode(204)
@@ -78,6 +82,7 @@ export class AuthController {
         res.clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_OPTIONS);
     }
 
+    // -- GET /auth/me
     @ApiBearerAuth()
     @Get('me')
     me(@CurrentUser() user: AuthUser) {

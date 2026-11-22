@@ -15,6 +15,7 @@ import { StudentService } from './student.service';
 export class StudentController {
     constructor(private readonly students: StudentService) {}
 
+    // -- GET /students -> list student on system
     @Get()
     search(@CurrentUser() user: AuthUser, @Query() q: StudentQueryDto) {
         return this.students.search(q, user.id);

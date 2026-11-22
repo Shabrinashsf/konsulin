@@ -10,6 +10,7 @@ import { StudyProgramService } from './study-program.service';
 export class StudyProgramController {
     constructor(private readonly studyPrograms: StudyProgramService) {}
 
+    // -- GET /study-programs -> list of available study program
     @Get()
     list(@Query() q: StudyProgramQueryDto) {
         return this.studyPrograms.list(q);

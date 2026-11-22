@@ -42,6 +42,13 @@ describe('GET /study-programs (e2e)', () => {
         expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
     });
 
+    it('tetap publik walau header token rusak', async () => {
+        await http()
+            .get('/api/v1/study-programs')
+            .set('Authorization', 'Bearer token-basi')
+            .expect(200);
+    });
+
     it.each(['S1', 'S2', 'S3'])(
         '?degree=%s → hanya prodi jenjang itu',
         async (degree) => {

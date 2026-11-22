@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -7,6 +8,7 @@ import {
     codeOf,
     dataOf,
     login as loginWith,
+    createLecturer,
     PASSWORD,
     refreshCookieOf,
     resetState,
@@ -79,6 +81,12 @@ describe('Auth (e2e)', () => {
             await register().expect(201);
         });
 
+        it('endpoint publik tetap jalan walau header token rusak', async () => {
+            await register()
+                .set('Authorization', 'Bearer token-basi')
+                .expect(201);
+        });
+
         it('email atau NRP duplikat → 409', async () => {
             await register().expect(201);
             const email = await register({
@@ -113,6 +121,13 @@ describe('Auth (e2e)', () => {
             ['angkatan di masa depan', { cohortYear: 9999 }],
             ['angkatan bukan bilangan bulat', { cohortYear: 2021.5 }],
             ['field tak dikenal (role)', { role: 'lecturer' }],
+            ['nama hanya spasi', { name: '    ' }],
+            ['password > 128 karakter', { password: `Aa1${'a'.repeat(126)}` }],
+            [
+                'email > 255 karakter',
+                { email: `${'a'.repeat(250)}@example.com` },
+            ],
+            ['angkatan berupa string', { cohortYear: '2021' }],
         ])('%s → 400', async (_, over) => {
             await register(over).expect(400);
             await resetState(app);
@@ -247,6 +262,36 @@ describe('Auth (e2e)', () => {
             }
         });
 
+        it('dua refresh bersamaan dengan token sama → satu 200, satu 401', async () => {
+            const cookie = refreshCookieOf(await login('budi@example.com'))!;
+            const results = await Promise.all(
+                [1, 2].map(() =>
+                    http().post('/api/v1/auth/refresh').set('Cookie', cookie),
+                ),
+            );
+            expect(results.map((r) => r.status).sort()).toEqual([200, 401]);
+        });
+
+        it('access token hasil refresh bisa dipakai', async () => {
+            const cookie = refreshCookieOf(await login('budi@example.com'))!;
+            const res = await http()
+                .post('/api/v1/auth/refresh')
+                .set('Cookie', cookie)
+                .expect(200);
+            await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Bearer ${tokenOf(res)}`)
+                .expect(200);
+        });
+
+        it('refresh token disimpan sebagai hash, bukan nilai asli', async () => {
+            const cookie = refreshCookieOf(await login('budi@example.com'))!;
+            const raw = cookie.split('=')[1];
+            expect(
+                await prisma.refreshToken.count({ where: { tokenHash: raw } }),
+            ).toBe(0);
+        });
+
         it('tanpa cookie / token asal → 401', async () => {
             await http().post('/api/v1/auth/refresh').expect(401);
             await http()
@@ -341,6 +386,49 @@ describe('Auth (e2e)', () => {
                 .get('/api/v1/auth/me')
                 .set('Authorization', `Basic ${token}`)
                 .expect(401);
+        });
+
+        it('access token kedaluwarsa → 401', async () => {
+            const user = await prisma.user.findFirstOrThrow();
+            const expired = await app
+                .get(JwtService)
+                .signAsync(
+                    { sub: user.id, role: user.role },
+                    { expiresIn: -10 },
+                );
+            await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Bearer ${expired}`)
+                .expect(401);
+        });
+
+        it('token palsu (secret lain, role diubah) → 401', async () => {
+            const user = await prisma.user.findFirstOrThrow();
+            const forged = await new JwtService({
+                secret: 'secret-palsu-yang-panjangnya-32-karakter',
+            }).signAsync({ sub: user.id, role: 'lecturer' });
+            await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Bearer ${forged}`)
+                .expect(401);
+        });
+
+        it('dosen → profil tanpa nrp, angkatan, prodi', async () => {
+            await createLecturer(prisma, {
+                name: 'Dosen Satu',
+                email: 'dosen@example.com',
+            });
+            const token = tokenOf(await login('dosen@example.com'));
+            const res = await http()
+                .get('/api/v1/auth/me')
+                .set('Authorization', `Bearer ${token}`)
+                .expect(200);
+            expect(dataOf(res)).toMatchObject({
+                role: 'lecturer',
+                nrp: null,
+                cohortYear: null,
+                studyProgram: null,
+            });
         });
 
         it('akun ber-deleted_at → 401 walau access token masih berlaku', async () => {

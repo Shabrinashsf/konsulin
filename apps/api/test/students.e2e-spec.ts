@@ -186,6 +186,19 @@ describe('GET /students (e2e)', () => {
             });
         });
 
+        it('nama sama → urutan stabil, tidak ada data dobel antar halaman', async () => {
+            await prisma.user.updateMany({
+                where: { role: 'student' },
+                data: { name: 'Nama Sama' },
+            });
+            const ids: string[] = [];
+            for (const page of [1, 2, 3, 4]) {
+                const res = await search(`limit=1&page=${page}`).expect(200);
+                ids.push(...dataOf<Student[]>(res).map((s) => s.id));
+            }
+            expect(new Set(ids).size).toBe(4);
+        });
+
         it('halaman di luar jangkauan → data kosong, total tetap', async () => {
             const res = await search('page=9').expect(200);
             expect(nrpsOf(res)).toEqual([]);

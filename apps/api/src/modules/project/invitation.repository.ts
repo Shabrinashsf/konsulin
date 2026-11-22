@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { InvitationView } from './invitation-state';
-import type { Page } from './project.repository';
+import type { Page } from '../../shared/http/pagination-query.dto';
 
 // determine which columns are retrieved from the database each time we load the student
 const STUDENT_SELECT = {

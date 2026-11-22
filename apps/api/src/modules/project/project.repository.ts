@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma, ProjectType } from '../../generated/prisma/client';
 import { containsText } from '../../prisma/contains-text';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Page } from '../../shared/http/pagination-query.dto';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 
 // determine which columns are retrieved from the database each time we load the project
@@ -60,13 +61,6 @@ export interface ProjectFilter {
     types?: ProjectType[];
     startFrom?: Date;
     startTo?: Date;
-}
-
-// valid data form that the service can send to the repository
-export interface Page {
-    skip: number;
-    limit: number;
-    order: 'asc' | 'desc';
 }
 
 // project that can be see by user: owned by Lecturer or asigned to Student

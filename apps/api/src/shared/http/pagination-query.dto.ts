@@ -12,6 +12,13 @@ export class PaginationQueryDto {
     }
 }
 
+// pagination info passed from a service to a repository
+export interface Page {
+    skip: number;
+    limit: number;
+    order: 'asc' | 'desc';
+}
+
 export function paginate<T>(
     items: T[],
     total: number,
