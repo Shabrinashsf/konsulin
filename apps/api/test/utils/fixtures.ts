@@ -102,6 +102,7 @@ export async function createProject(
         title: string;
         type: ProjectType;
         startDate: Date;
+        createdAt: Date;
         deletedAt: Date;
     }> = {},
 ) {

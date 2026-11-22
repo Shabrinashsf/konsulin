@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { type Env, validateEnv } from './config/env.schema';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './modules/identity/identity.module';
+import { ProjectModule } from './modules/project/project.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { JwtAuthGuard } from './shared/auth/jwt-auth.guard';
 import { RolesGuard } from './shared/auth/roles.guard';
@@ -18,6 +20,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
             validate: validateEnv,
         }),
         ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+        EventEmitterModule.forRoot(),
         JwtModule.registerAsync({
             global: true,
             inject: [ConfigService],
@@ -30,6 +33,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         }),
         PrismaModule,
         IdentityModule,
+        ProjectModule,
     ],
     controllers: [HealthController],
     providers: [

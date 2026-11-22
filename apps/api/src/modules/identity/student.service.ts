@@ -2,14 +2,19 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginate } from '../../shared/http/pagination-query.dto';
+import { ProjectAccessService } from '../project/project-access.service';
+import { PROJECT_TYPE_RULES } from '../project/project-type-rules';
 import { degreeNameFilter, withDegree } from './degree';
 import { StudentQueryDto } from './dto/student-query.dto';
 
 @Injectable()
 export class StudentService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly projects: ProjectAccessService,
+    ) {}
 
-    async search(q: StudentQueryDto) {
+    async search(q: StudentQueryDto, lecturerId: string) {
         const where: Prisma.UserWhereInput = {
             role: 'student',
             deletedAt: null,
@@ -24,6 +29,9 @@ export class StudentService {
                     { nrp: { contains: q.q, mode: 'insensitive' } },
                 ],
             }),
+            AND: q.eligibleForProjectId
+                ? await this.eligibleFor(q.eligibleForProjectId, lecturerId)
+                : [],
         };
         const [rows, total] = await this.prisma.$transaction([
             this.prisma.user.findMany({
@@ -46,5 +54,20 @@ export class StudentService {
             studyProgram: withDegree(sp),
         }));
         return paginate(items, total, q);
+    }
+
+    private async eligibleFor(
+        projectId: string,
+        lecturerId: string,
+    ): Promise<Prisma.UserWhereInput[]> {
+        const project = await this.projects.getOwnedProject(
+            projectId,
+            lecturerId,
+        );
+        const degree = PROJECT_TYPE_RULES[project.type].requiredDegree;
+        return [
+            degree ? { studyProgram: { name: degreeNameFilter(degree) } } : {},
+            { memberships: { none: { projectId } } },
+        ];
     }
 }

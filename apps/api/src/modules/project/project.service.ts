@@ -1,0 +1,186 @@
+import {
+    BadRequestException,
+    ConflictException,
+    Injectable,
+    NotFoundException,
+} from '@nestjs/common';
+import type { AuthUser } from '../../shared/auth/auth.decorators';
+import { paginate } from '../../shared/http/pagination-query.dto';
+import { formatDateOnly, parseDateOnly } from '../../shared/time/time';
+import { withDegree } from '../identity/degree';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { MemberQueryDto } from './dto/member-query.dto';
+import { ProjectQueryDto } from './dto/project-query.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { InvitationRepository } from './invitation.repository';
+import { ProjectAccessService } from './project-access.service';
+import { PROJECT_TYPE_RULES, typesForDegree } from './project-type-rules';
+import {
+    type MemberRow,
+    ProjectRepository,
+    type ProjectRow,
+} from './project.repository';
+
+// change raw database response to a response form that can be send to client
+export const toProjectView = ({ _count, ...p }: ProjectRow) => ({
+    ...p,
+    ...PROJECT_TYPE_RULES[p.type],
+    startDate: p.startDate && formatDateOnly(p.startDate),
+    endDate: p.endDate && formatDateOnly(p.endDate),
+    memberCount: _count.members,
+});
+
+// change raw database response to a response form that can be send to client
+const toMemberView = ({ joinedAt, student }: MemberRow) => ({
+    ...student,
+    studyProgram: withDegree(student.studyProgram),
+    joinedAt,
+});
+
+// a safe parseDateOnly to a optional field, change 'YYYY-MM-DD' to date object, it do nothing if nul or undefined
+function toDate(s: string | null | undefined): Date | null | undefined {
+    if (s === undefined) return undefined;
+    return s === null ? null : parseDateOnly(s);
+}
+
+// make sure end date are not before start date
+function assertDateRange(start: Date | null, end: Date | null) {
+    if (start && end && end < start) {
+        throw new BadRequestException({
+            message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
+            code: 'INVALID_DATE_RANGE',
+        });
+    }
+}
+
+@Injectable()
+export class ProjectService {
+    constructor(
+        private readonly projects: ProjectRepository,
+        private readonly invitations: InvitationRepository,
+        private readonly access: ProjectAccessService,
+    ) {}
+
+    async list(user: AuthUser, q: ProjectQueryDto) {
+        const [rows, total] = await this.projects.findPage(
+            user,
+            {
+                q: q.q,
+                type: q.type,
+                types: q.degree && typesForDegree(q.degree),
+                startFrom: q.startFrom ? parseDateOnly(q.startFrom) : undefined,
+                startTo: q.startTo ? parseDateOnly(q.startTo) : undefined,
+            },
+            q,
+        );
+        return paginate(rows.map(toProjectView), total, q);
+    }
+
+    async create(lecturerId: string, dto: CreateProjectDto) {
+        const startDate = parseDateOnly(dto.startDate);
+        const endDate = toDate(dto.endDate) ?? null;
+        assertDateRange(startDate, endDate);
+        const project = await this.projects.create(lecturerId, {
+            title: dto.title,
+            description: dto.description,
+            type: dto.type,
+            startDate,
+            endDate,
+        });
+        return toProjectView(project);
+    }
+
+    async get(projectId: string, user: AuthUser) {
+        // check access and take project
+        const project = await this.access.getVisibleProject(projectId, user);
+
+        // check the role of user for this project
+        const isOwner = project.lecturer.id === user.id;
+
+        return {
+            ...toProjectView(project),
+            summary: {
+                memberCount: project._count.members,
+
+                // only visible to Lecturer
+                pendingInvitationCount: isOwner
+                    ? await this.invitations.countActivePending({ projectId })
+                    : null,
+            },
+        };
+    }
+
+    async update(projectId: string, lecturerId: string, dto: UpdateProjectDto) {
+        // check access and take project
+        const project = await this.access.getOwnedProject(
+            projectId,
+            lecturerId,
+        );
+
+        // prevent type project changes when there's already have a memeber or a pending invitation
+        if (dto.type && dto.type !== project.type) {
+            const locked =
+                project._count.members > 0 ||
+                (await this.invitations.countActivePending({ projectId })) > 0;
+            if (locked) {
+                throw new ConflictException({
+                    message:
+                        'Tipe project tidak dapat diubah karena sudah ada anggota atau undangan pending',
+                    code: 'PROJECT_TYPE_LOCKED',
+                });
+            }
+        }
+
+        // startDate is required; the DTO validation already rejects null values.
+        const startDate =
+            dto.startDate === undefined
+                ? undefined
+                : parseDateOnly(dto.startDate);
+        const endDate = toDate(dto.endDate);
+        assertDateRange(
+            startDate ?? project.startDate,
+            endDate === undefined ? project.endDate : endDate,
+        );
+
+        const updated = await this.projects.update(projectId, {
+            title: dto.title,
+            description: dto.description,
+            type: dto.type,
+            startDate,
+            endDate,
+        });
+        return toProjectView(updated);
+    }
+
+    async remove(projectId: string, lecturerId: string) {
+        // check access
+        await this.access.getOwnedProject(projectId, lecturerId);
+        await this.projects.softDelete(projectId);
+    }
+
+    async listMembers(projectId: string, user: AuthUser, q: MemberQueryDto) {
+        // check access
+        await this.access.getVisibleProject(projectId, user);
+        const [rows, total] = await this.projects.findMembersPage(
+            projectId,
+            q.q,
+            q,
+        );
+        return paginate(rows.map(toMemberView), total, q);
+    }
+
+    async removeMember(
+        projectId: string,
+        lecturerId: string,
+        studentId: string,
+    ) {
+        // check access
+        await this.access.getOwnedProject(projectId, lecturerId);
+        if (!(await this.projects.removeMember(projectId, studentId))) {
+            throw new NotFoundException({
+                message: 'Mahasiswa bukan anggota project ini',
+                code: 'MEMBER_NOT_FOUND',
+            });
+        }
+    }
+}

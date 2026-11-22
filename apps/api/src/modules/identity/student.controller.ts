@@ -1,10 +1,13 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../../shared/auth/auth.decorators';
+import {
+    type AuthUser,
+    CurrentUser,
+    Roles,
+} from '../../shared/auth/auth.decorators';
 import { StudentQueryDto } from './dto/student-query.dto';
 import { StudentService } from './student.service';
 
-// TODO(project): query `eligibleForProjectId` (BR-17 + belum anggota).
 @ApiTags('Users')
 @ApiBearerAuth()
 @Roles('lecturer')
@@ -13,7 +16,7 @@ export class StudentController {
     constructor(private readonly students: StudentService) {}
 
     @Get()
-    search(@Query() q: StudentQueryDto) {
-        return this.students.search(q);
+    search(@CurrentUser() user: AuthUser, @Query() q: StudentQueryDto) {
+        return this.students.search(q, user.id);
     }
 }

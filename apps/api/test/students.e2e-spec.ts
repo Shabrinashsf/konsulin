@@ -4,7 +4,9 @@ import type { App } from 'supertest/types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './utils/create-test-app';
 import {
+    addMember,
     createLecturer,
+    createProject,
     createStudent,
     dataOf,
     login,
@@ -28,6 +30,7 @@ describe('GET /students (e2e)', () => {
     let s1Id: string;
     let s2Id: string;
     let lecturerToken: string;
+    let lecturerId: string;
     const http = () => request(app.getHttpServer());
 
     const search = (qs = '') =>
@@ -74,6 +77,11 @@ describe('GET /students (e2e)', () => {
             cohortYear: 2021,
             deletedAt: new Date(),
         });
+        lecturerId = (
+            await prisma.user.findFirstOrThrow({
+                where: { email: 'dosen@example.com' },
+            })
+        ).id;
         lecturerToken = tokenOf(await login(app, 'dosen@example.com'));
     });
 
@@ -189,6 +197,57 @@ describe('GET /students (e2e)', () => {
             ['query tak dikenal', 'foo=bar'],
         ])('%s → 400', async (_, qs) => {
             await search(qs).expect(400);
+        });
+    });
+    describe('eligibleForProjectId', () => {
+        const idOf = (nrp: string) =>
+            prisma.user
+                .findFirstOrThrow({ where: { nrp, deletedAt: null } })
+                .then((u) => u.id);
+
+        it('project s2_thesis → hanya mahasiswa S2 yang belum anggota', async () => {
+            const project = await createProject(prisma, lecturerId, {
+                type: 's2_thesis',
+            });
+            await addMember(prisma, project.id, await idOf('6025221003'));
+            const res = await search(
+                `eligibleForProjectId=${project.id}`,
+            ).expect(200);
+            expect(nrpsOf(res)).toEqual(['6025231004']);
+        });
+
+        it('project tipe umum → semua jenjang kecuali anggota; bisa digabung filter lain', async () => {
+            const project = await createProject(prisma, lecturerId, {
+                type: 'competition',
+            });
+            await addMember(prisma, project.id, await idOf('5025211001'));
+            const all = await search(
+                `eligibleForProjectId=${project.id}`,
+            ).expect(200);
+            expect(nrpsOf(all)).toEqual([
+                '5025221002',
+                '6025221003',
+                '6025231004',
+            ]);
+            const filtered = await search(
+                `eligibleForProjectId=${project.id}&degree=S1`,
+            ).expect(200);
+            expect(nrpsOf(filtered)).toEqual(['5025221002']);
+        });
+
+        it('project milik dosen lain / terhapus → 404; bukan UUID → 400', async () => {
+            const other = await createLecturer(prisma, {
+                name: 'Dosen Lain',
+                email: 'lain@example.com',
+            });
+            const foreign = await createProject(prisma, other.id);
+            const deleted = await createProject(prisma, lecturerId, {
+                deletedAt: new Date(),
+            });
+            for (const id of [foreign.id, deleted.id]) {
+                await search(`eligibleForProjectId=${id}`).expect(404);
+            }
+            await search('eligibleForProjectId=abc').expect(400);
         });
     });
 });

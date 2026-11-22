@@ -8,4 +8,5 @@ export class StudentQueryDto extends PaginationQueryDto {
     @IsOptional() @IsUUID() studyProgramId?: string;
     @IsOptional() @IsIn(DEGREES) degree?: Degree;
     @IsOptional() @Type(() => Number) @IsInt() cohortYear?: number;
+    @IsOptional() @IsUUID() eligibleForProjectId?: string;
 }
