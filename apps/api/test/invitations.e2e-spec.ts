@@ -516,6 +516,28 @@ describe('Invitations (e2e)', () => {
             ).toBe(1);
         });
 
+        it('accept & revoke bersamaan → tepat satu yang berhasil', async () => {
+            const inv = await createInvitation(
+                prisma,
+                researchId,
+                p.studentS1.id,
+            );
+            const [accept, revoke] = await Promise.all([
+                respond(inv.id, 'accept', p.tokens.s1),
+                as(p.tokens.owner).delete(
+                    `/api/v1/projects/${researchId}/invitations/${inv.id}`,
+                ),
+            ]);
+            expect([accept.status, revoke.status].sort()).toEqual([200, 409]);
+            const row = await prisma.projectInvitation.findUniqueOrThrow({
+                where: { id: inv.id },
+            });
+            const members = await prisma.projectMember.count({
+                where: { projectId: researchId },
+            });
+            expect(members).toBe(row.status === 'accepted' ? 1 : 0);
+        });
+
         it('accept saat sudah jadi anggota → 200 tanpa baris ganda', async () => {
             const inv = await createInvitation(
                 prisma,

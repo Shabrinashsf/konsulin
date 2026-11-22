@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, ProjectType } from '../../generated/prisma/client';
+import { containsText } from '../../prisma/contains-text';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 
@@ -87,7 +88,7 @@ export class ProjectRepository {
             deletedAt: null,
             AND: [
                 visibleTo(user),
-                f.q ? { title: { contains: f.q, mode: 'insensitive' } } : {},
+                f.q ? { title: containsText(f.q) } : {},
                 f.type ? { type: f.type } : {},
                 f.types ? { type: { in: f.types } } : {},
                 f.startFrom || f.startTo
@@ -139,10 +140,7 @@ export class ProjectRepository {
             student: {
                 deletedAt: null,
                 ...(q && {
-                    OR: [
-                        { name: { contains: q, mode: 'insensitive' } },
-                        { nrp: { contains: q, mode: 'insensitive' } },
-                    ],
+                    OR: [{ name: containsText(q) }, { nrp: containsText(q) }],
                 }),
             },
         };

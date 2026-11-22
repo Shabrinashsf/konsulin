@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client';
+import { containsText } from '../../prisma/contains-text';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { ProjectAccessService } from '../project/project-access.service';
@@ -24,10 +25,7 @@ export class StudentService {
                 studyProgram: { name: degreeNameFilter(q.degree) },
             }),
             ...(q.q && {
-                OR: [
-                    { name: { contains: q.q, mode: 'insensitive' } },
-                    { nrp: { contains: q.q, mode: 'insensitive' } },
-                ],
+                OR: [{ name: containsText(q.q) }, { nrp: containsText(q.q) }],
             }),
             AND: q.eligibleForProjectId
                 ? await this.eligibleFor(q.eligibleForProjectId, lecturerId)

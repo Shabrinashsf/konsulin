@@ -162,6 +162,12 @@ describe('GET /students (e2e)', () => {
             expect(nrpsOf(res)).toEqual(['6025221003', '6025231004']);
         });
 
+        it('q wildcard SQL (% _) dicari apa adanya → kosong', async () => {
+            for (const q of ['%25', '_']) {
+                expect(nrpsOf(await search(`q=${q}`).expect(200))).toEqual([]);
+            }
+        });
+
         it('q tidak menemukan akun terhapus', async () => {
             const res = await search('q=Terhapus').expect(200);
             expect(nrpsOf(res)).toEqual([]);

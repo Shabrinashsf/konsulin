@@ -208,6 +208,47 @@ describe('Projects (e2e)', () => {
             }
         });
 
+        it('memberCount per item di daftar', async () => {
+            const beta = await prisma.project.findFirstOrThrow({
+                where: { title: 'Beta Tesis' },
+            });
+            await addMember(prisma, beta.id, p.studentS2.id);
+            const res = await list('q=Beta').expect(200);
+            expect(dataOf<ProjectView[]>(res)[0].memberCount).toBe(1);
+        });
+
+        it('q dengan karakter wildcard SQL (% _) dicari apa adanya', async () => {
+            await createProject(prisma, p.owner.id, {
+                title: 'Diskon 100% Riset',
+            });
+            expect(titlesOf(await list('q=%25').expect(200))).toEqual([
+                'Diskon 100% Riset',
+            ]);
+            expect(titlesOf(await list('q=_').expect(200))).toEqual([]);
+        });
+
+        it('parameter diulang (type=a&type=b) → 400', async () => {
+            await list('type=research&type=competition').expect(400);
+        });
+
+        it('judul sama → urutan stabil, tidak ada item dobel antar halaman', async () => {
+            await prisma.project.deleteMany({});
+            for (let i = 0; i < 4; i++) {
+                await createProject(prisma, p.owner.id, {
+                    title: 'Sama',
+                    createdAt: new Date('2026-01-01T00:00:00Z'),
+                });
+            }
+            const ids: string[] = [];
+            for (const page of [1, 2, 3, 4]) {
+                const res = await list(
+                    `sort=title&limit=1&page=${page}`,
+                ).expect(200);
+                ids.push(...dataOf<ProjectView[]>(res).map((x) => x.id));
+            }
+            expect(new Set(ids).size).toBe(4);
+        });
+
         it('tanpa token → 401', async () => {
             await http().get('/api/v1/projects').expect(401);
         });
@@ -342,6 +383,20 @@ describe('Projects (e2e)', () => {
         it('id bukan UUID → 400', async () => {
             await as(p.tokens.owner).get('/api/v1/projects/abc').expect(400);
         });
+
+        it('mahasiswa yang baru diundang (belum accept) belum bisa melihat project', async () => {
+            // studentS2 punya undangan pending di project ini (beforeEach).
+            await as(p.tokens.s2)
+                .get(`/api/v1/projects/${projectId}`)
+                .expect(404);
+            await as(p.tokens.s2)
+                .get(`/api/v1/projects/${projectId}/members`)
+                .expect(404);
+            const list = await as(p.tokens.s2)
+                .get('/api/v1/projects')
+                .expect(200);
+            expect(metaOf(list).total).toBe(0);
+        });
     });
 
     describe('PATCH /projects/:projectId', () => {
@@ -415,6 +470,21 @@ describe('Projects (e2e)', () => {
         it('tipe sama dengan sekarang saat sudah ada anggota → 200 (bukan perubahan)', async () => {
             await addMember(prisma, projectId, p.studentS1.id);
             await patch({ type: 'research', title: 'Judul Valid' }).expect(200);
+        });
+
+        it('undangan pending di project lain tidak mengunci tipe', async () => {
+            const other = await createProject(prisma, p.owner.id);
+            await createInvitation(prisma, other.id, p.studentS1.id);
+            await patch({ type: 's1_thesis' }).expect(200);
+        });
+
+        it('anggota yang akunnya terhapus tidak mengunci tipe', async () => {
+            await addMember(prisma, projectId, p.studentS1.id);
+            await prisma.user.update({
+                where: { id: p.studentS1.id },
+                data: { deletedAt: new Date() },
+            });
+            await patch({ type: 's1_thesis' }).expect(200);
         });
 
         it('undangan declined/revoked/accepted tidak mengunci tipe', async () => {
@@ -589,6 +659,13 @@ describe('Projects (e2e)', () => {
             ]);
         });
 
+        it('GET members: q wildcard SQL (%) dicari apa adanya → kosong', async () => {
+            const res = await as(p.tokens.owner)
+                .get(`/api/v1/projects/${projectId}/members?q=%25`)
+                .expect(200);
+            expect(metaOf(res).total).toBe(0);
+        });
+
         it('GET members: akun mahasiswa terhapus tidak tampil & tidak dihitung', async () => {
             await prisma.user.update({
                 where: { id: p.studentS3.id },
@@ -646,6 +723,23 @@ describe('Projects (e2e)', () => {
                 .get(`/api/v1/projects/${projectId}/members`)
                 .expect(200);
             expect(metaOf(res).total).toBe(2);
+        });
+
+        it('DELETE member: riwayat undangan tetap ada', async () => {
+            await createInvitation(prisma, projectId, p.studentS1.id, {
+                status: 'accepted',
+            });
+            await as(p.tokens.owner)
+                .delete(
+                    `/api/v1/projects/${projectId}/members/${p.studentS1.id}`,
+                )
+                .expect(204);
+            const res = await as(p.tokens.owner)
+                .get(
+                    `/api/v1/projects/${projectId}/invitations?status=accepted`,
+                )
+                .expect(200);
+            expect(metaOf(res).total).toBe(1);
         });
 
         it('DELETE member bukan anggota → 404 MEMBER_NOT_FOUND', async () => {
