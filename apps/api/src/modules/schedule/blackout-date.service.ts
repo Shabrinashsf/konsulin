@@ -11,15 +11,16 @@ import {
     parseDateOnly,
     toJakartaDate,
 } from '../../shared/time/time';
-import { type AffectedRow, BLACKOUT_CANCEL_REASON } from './blackout-impact';
 import {
     BlackoutDateRepository,
     type BlackoutRow,
 } from './blackout-date.repository';
 import {
-    CONSULTATION_CANCELLED,
-    ConsultationCancelledEvent,
-} from './consultation-cancelled.event';
+    CANCEL_REASON,
+    type CancelledRow,
+    toCancelledEvent,
+} from '../../shared/consultation/cancellation';
+import { CONSULTATION_CANCELLED } from '../../shared/consultation/consultation-cancelled.event';
 import { assertDateRange, datesBetween } from './date-range';
 import { BlackoutQueryDto } from './dto/blackout-query.dto';
 import { BlackoutRangeQueryDto } from './dto/blackout-range-query.dto';
@@ -34,7 +35,7 @@ const toBlackoutView = (r: BlackoutRow) => ({
 });
 
 // affected consultation as shown to the lecturer (no student email)
-const toAffectedView = ({ lecturer, student, ...c }: AffectedRow) => {
+const toAffectedView = ({ lecturer, student, ...c }: CancelledRow) => {
     void lecturer;
     return {
         ...c,
@@ -95,17 +96,7 @@ export class BlackoutDateService {
         for (const c of result.cancelled) {
             this.events.emit(
                 CONSULTATION_CANCELLED,
-                new ConsultationCancelledEvent(
-                    c.id,
-                    c.project,
-                    c.lecturer,
-                    c.student,
-                    formatDateOnly(c.requestedDate),
-                    c.startAt,
-                    c.endAt,
-                    BLACKOUT_CANCEL_REASON,
-                    'lecturer',
-                ),
+                toCancelledEvent(c, CANCEL_REASON.blackout, 'lecturer'),
             );
         }
         return {

@@ -1,32 +1,15 @@
 import type { Prisma } from '../../generated/prisma/client';
+import { cancellableWhere } from '../../shared/consultation/cancellation';
 import {
     addDays,
     jakartaDateTime,
     parseDateOnly,
 } from '../../shared/time/time';
 
-export const BLACKOUT_CANCEL_REASON = 'Dosen berhalangan pada tanggal tersebut';
-
-export const AFFECTED_SELECT = {
-    id: true,
-    status: true,
-    topic: true,
-    requestedDate: true,
-    startAt: true,
-    endAt: true,
-    project: { select: { id: true, title: true } },
-    lecturer: { select: { id: true, name: true } },
-    student: { select: { id: true, name: true, email: true } },
-} satisfies Prisma.ConsultationSelect;
-
-export type AffectedRow = Prisma.ConsultationGetPayload<{
-    select: typeof AFFECTED_SELECT;
-}>;
-
-// consultations a blackout of [from, to] (WIB dates) would cancel:
-// approved, not started yet, with its time in the range
-// requested with a proposed time in the range
-// requested without a proposed time, requested for a date in the range
+// still-cancellable consultations a blackout of [from, to] (WIB dates) would cancel:
+// - approved with its time in the range (not started: cancellableWhere)
+// - requested with a proposed time in the range
+// - requested without a proposed time, requested for a date in the range
 export function affectedWhere(
     lecturerId: string,
     from: string,
@@ -40,16 +23,21 @@ export function affectedWhere(
     return {
         lecturerId,
         project: { deletedAt: null },
-        OR: [
-            { status: 'approved', startAt: { ...inRange, gt: now } },
-            { status: 'requested', startAt: inRange },
+        AND: [
+            cancellableWhere(now),
             {
-                status: 'requested',
-                startAt: null,
-                requestedDate: {
-                    gte: parseDateOnly(from),
-                    lte: parseDateOnly(to),
-                },
+                OR: [
+                    { status: 'approved', startAt: inRange },
+                    { status: 'requested', startAt: inRange },
+                    {
+                        status: 'requested',
+                        startAt: null,
+                        requestedDate: {
+                            gte: parseDateOnly(from),
+                            lte: parseDateOnly(to),
+                        },
+                    },
+                ],
             },
         ],
     };

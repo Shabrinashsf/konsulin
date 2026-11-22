@@ -5,7 +5,7 @@ import type { App } from 'supertest/types';
 import {
     CONSULTATION_CANCELLED,
     ConsultationCancelledEvent,
-} from '../src/modules/schedule/consultation-cancelled.event';
+} from '../src/shared/consultation/consultation-cancelled.event';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
     addDays,

@@ -1,6 +1,7 @@
 export const CONSULTATION_CANCELLED = 'consultation.cancelled';
 
-// email (+ .ics CANCEL) is sent by the notification module listener
+// email (+ .ics CANCEL) is sent by the notification module listener;
+// in shared projects it goes to every member except the actor
 export class ConsultationCancelledEvent {
     constructor(
         readonly consultationId: string,
@@ -10,7 +11,7 @@ export class ConsultationCancelledEvent {
         readonly requestedDate: string,
         readonly startAt: Date | null,
         readonly endAt: Date | null,
-        readonly reason: string,
+        readonly reason: string | null,
         readonly cancelledBy: 'lecturer' | 'student',
     ) {}
 }

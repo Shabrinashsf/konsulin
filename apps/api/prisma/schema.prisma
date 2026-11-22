@@ -222,6 +222,7 @@ model Consultation {
   proposedBy     ConsultationParty? @map("proposed_by") /// null = no time proposed yet (lecturer's turn)
   startAt        DateTime?          @map("start_at") @db.Timestamptz(6) /// null until a time is proposed
   endAt          DateTime?          @map("end_at") @db.Timestamptz(6)
+  sortAt         DateTime           @default(now()) @map("sort_at") @db.Timestamptz(6) /// start_at ?? requested_date 00:00 WIB, maintained by trigger
   location       String?            @db.VarChar(255)
   statusReason   String?            @map("status_reason")
   summary        String?
@@ -236,6 +237,8 @@ model Consultation {
 
   @@index([lecturerId, startAt], map: "consultations_lecturer_start")
   @@index([lecturerId, requestedDate], map: "consultations_lecturer_date")
+  @@index([lecturerId, sortAt], map: "consultations_lecturer_sort")
+  @@index([projectId, sortAt], map: "consultations_project_sort")
   @@index([projectId, status], map: "consultations_project_status")
   @@index([studentId])
   @@map("consultations")

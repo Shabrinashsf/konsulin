@@ -4,7 +4,14 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
+import {
+    CANCEL_REASON,
+    type CancelledRow,
+    toCancelledEvent,
+} from '../../shared/consultation/cancellation';
+import { CONSULTATION_CANCELLED } from '../../shared/consultation/consultation-cancelled.event';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { formatDateOnly, parseDateOnly } from '../../shared/time/time';
 import { withDegree } from '../identity/degree';
@@ -59,6 +66,7 @@ export class ProjectService {
         private readonly projects: ProjectRepository,
         private readonly invitations: InvitationRepository,
         private readonly access: ProjectAccessService,
+        private readonly events: EventEmitter2,
     ) {}
 
     async list(user: AuthUser, q: ProjectQueryDto) {
@@ -155,7 +163,12 @@ export class ProjectService {
     async remove(projectId: string, lecturerId: string) {
         // check access
         await this.access.getOwnedProject(projectId, lecturerId);
-        await this.projects.softDelete(projectId);
+        const cancelled = await this.projects.softDelete(
+            projectId,
+            lecturerId,
+            new Date(),
+        );
+        this.emitCancelled(cancelled, CANCEL_REASON.projectDeleted);
     }
 
     async listMembers(projectId: string, user: AuthUser, q: MemberQueryDto) {
@@ -176,11 +189,28 @@ export class ProjectService {
     ) {
         // check access
         await this.access.getOwnedProject(projectId, lecturerId);
-        if (!(await this.projects.removeMember(projectId, studentId))) {
+        const cancelled = await this.projects.removeMember(
+            projectId,
+            lecturerId,
+            studentId,
+            new Date(),
+        );
+        if (!cancelled) {
             throw new NotFoundException({
                 message: 'Mahasiswa bukan anggota project ini',
                 code: 'MEMBER_NOT_FOUND',
             });
+        }
+        this.emitCancelled(cancelled, CANCEL_REASON.memberRemoved);
+    }
+
+    // email for consultations cancelled
+    private emitCancelled(rows: CancelledRow[], reason: string) {
+        for (const c of rows) {
+            this.events.emit(
+                CONSULTATION_CANCELLED,
+                toCancelledEvent(c, reason, 'lecturer'),
+            );
         }
     }
 }

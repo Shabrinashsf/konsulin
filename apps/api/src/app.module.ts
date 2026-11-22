@@ -7,6 +7,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { type Env, validateEnv } from './config/env.schema';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './modules/identity/identity.module';
+import { ConsultationModule } from './modules/consultation/consultation.module';
 import { ProjectModule } from './modules/project/project.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -36,6 +37,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         IdentityModule,
         ProjectModule,
         ScheduleModule,
+        ConsultationModule,
     ],
     controllers: [HealthController],
     providers: [

@@ -7,8 +7,5 @@
         "test:api:e2e": "pnpm --filter @konsulin/api test:e2e",
         "test:api:cov": "pnpm --filter @konsulin/api test:cov",
         "lint:api": "pnpm --filter @konsulin/api lint"
-    },
-    "devDependencies": {
-        "@types/jest": "^30.0.0"
     }
 }

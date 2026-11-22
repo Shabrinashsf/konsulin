@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, ProjectType } from '../../generated/prisma/client';
 import { containsText } from '../../prisma/contains-text';
+import { lockLecturer } from '../../prisma/lock-lecturer';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Page } from '../../shared/http/pagination-query.dto';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
+import {
+    CANCEL_REASON,
+    cancelConsultations,
+    cancellableWhere,
+} from '../../shared/consultation/cancellation';
 
 // determine which columns are retrieved from the database each time we load the project
 const PROJECT_SELECT = {
@@ -120,10 +126,20 @@ export class ProjectRepository {
         });
     }
 
-    async softDelete(projectId: string) {
-        await this.prisma.project.update({
-            where: { id: projectId },
-            data: { deletedAt: new Date() },
+    // active consultations of the project are cancelled with it
+    softDelete(projectId: string, lecturerId: string, now: Date) {
+        return this.prisma.$transaction(async (tx) => {
+            // same lock as schedule/consultation, so cancellations do not race
+            await lockLecturer(tx, lecturerId);
+            await tx.project.update({
+                where: { id: projectId },
+                data: { deletedAt: now },
+            });
+            return cancelConsultations(
+                tx,
+                { projectId, AND: [cancellableWhere(now)] },
+                CANCEL_REASON.projectDeleted,
+            );
         });
     }
 
@@ -150,11 +166,25 @@ export class ProjectRepository {
         ]);
     }
 
-    async removeMember(projectId: string, studentId: string) {
-        const { count } = await this.prisma.projectMember.deleteMany({
-            where: { projectId, studentId },
+    // the student's active consultations in the project are cancelled with the membership. null when the student is not a member.
+    removeMember(
+        projectId: string,
+        lecturerId: string,
+        studentId: string,
+        now: Date,
+    ) {
+        return this.prisma.$transaction(async (tx) => {
+            await lockLecturer(tx, lecturerId);
+            const { count } = await tx.projectMember.deleteMany({
+                where: { projectId, studentId },
+            });
+            if (count === 0) return null;
+            return cancelConsultations(
+                tx,
+                { projectId, studentId, AND: [cancellableWhere(now)] },
+                CANCEL_REASON.memberRemoved,
+            );
         });
-        return count > 0;
     }
 
     findVisible(projectId: string, user: AuthUser) {

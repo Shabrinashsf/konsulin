@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { lockLecturer } from '../../prisma/lock-lecturer';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Page } from '../../shared/http/pagination-query.dto';
 import { formatDateOnly, parseDateOnly } from '../../shared/time/time';
 import {
-    AFFECTED_SELECT,
-    type AffectedRow,
-    affectedWhere,
-    BLACKOUT_CANCEL_REASON,
-} from './blackout-impact';
+    CANCEL_REASON,
+    cancelConsultations,
+    CANCELLED_SELECT,
+    type CancelledRow,
+} from '../../shared/consultation/cancellation';
+import { affectedWhere } from './blackout-impact';
 
 // determine which columns are retrieved from the database each time we load the blackout date
 const BLACKOUT_SELECT = {
@@ -34,8 +36,8 @@ export interface CreateRangeInput {
 }
 
 export type CreateRangeResult =
-    | { conflict: AffectedRow[] }
-    | { created: string[]; skipped: string[]; cancelled: AffectedRow[] };
+    | { conflict: CancelledRow[] }
+    | { created: string[]; skipped: string[]; cancelled: CancelledRow[] };
 
 const isPrismaError = (e: unknown, code: string) =>
     e instanceof Prisma.PrismaClientKnownRequestError && e.code === code;
@@ -81,30 +83,27 @@ export class BlackoutDateRepository {
         const { lecturerId, dates } = input;
         return this.prisma.$transaction(async (tx) => {
             // serialize blackout changes of the same lecturer
-            await tx.$queryRaw`SELECT id FROM users WHERE id = ${lecturerId}::uuid FOR UPDATE`;
+            await lockLecturer(tx, lecturerId);
 
-            const affected = await tx.consultation.findMany({
-                where: affectedWhere(
-                    lecturerId,
-                    input.from,
-                    input.to,
-                    input.now,
-                ),
-                select: AFFECTED_SELECT,
-                orderBy: [{ requestedDate: 'asc' }, { startAt: 'asc' }],
-            });
-            if (affected.length > 0 && !input.cancelConsultations) {
-                return { conflict: affected };
-            }
-            if (affected.length > 0) {
-                await tx.consultation.updateMany({
-                    where: { id: { in: affected.map((c) => c.id) } },
-                    data: {
-                        status: 'cancelled',
-                        statusReason: BLACKOUT_CANCEL_REASON,
-                    },
+            const where = affectedWhere(
+                lecturerId,
+                input.from,
+                input.to,
+                input.now,
+            );
+            if (!input.cancelConsultations) {
+                const conflict = await tx.consultation.findMany({
+                    where,
+                    select: CANCELLED_SELECT,
+                    orderBy: [{ sortAt: 'asc' }, { id: 'asc' }],
                 });
+                if (conflict.length > 0) return { conflict };
             }
+            const affected = await cancelConsultations(
+                tx,
+                where,
+                CANCEL_REASON.blackout,
+            );
 
             const existing = await tx.blackoutDate.findMany({
                 where: { lecturerId, date: { in: dates.map(parseDateOnly) } },
