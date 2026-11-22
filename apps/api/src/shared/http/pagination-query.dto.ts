@@ -1,12 +1,11 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import type { Paginated } from './response.interceptor';
 
 export class PaginationQueryDto {
     @IsOptional() @Type(() => Number) @IsInt() @Min(1) page: number = 1;
     @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit: number =
         10;
-    @IsOptional() @IsString() sort?: string;
     @IsOptional() @IsIn(['asc', 'desc']) order: 'asc' | 'desc' = 'desc';
     get skip() {
         return (this.page - 1) * this.limit;

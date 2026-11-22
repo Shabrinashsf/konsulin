@@ -11,7 +11,7 @@ import {
     MinLength,
     ValidateBy,
 } from 'class-validator';
-import { normalizeEmail, trim } from './transforms';
+import { normalizeEmail, trim } from '../../../shared/http/transforms';
 import { toJakartaDate } from '../../../shared/time/time';
 
 export class RegisterDto {
