@@ -4,10 +4,12 @@ import * as argon2 from 'argon2';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import type {
+    ConsultationStatus,
     InvitationStatus,
     ProjectType,
 } from '../../src/generated/prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { toJakartaDate } from '../../src/shared/time/time';
 
 export const PASSWORD = 'Rahasia123';
 
@@ -137,6 +139,31 @@ export const createInvitation = (
             ...data,
         },
     });
+
+// consultation created directly via Prisma (no consultation module yet)
+export const createConsultation = (
+    prisma: PrismaService,
+    data: {
+        projectId: string;
+        lecturerId: string;
+        studentId: string;
+        requestedDate?: string;
+        startAt?: Date;
+        endAt?: Date;
+        status?: ConsultationStatus;
+    },
+) => {
+    const { requestedDate, ...rest } = data;
+    const date = requestedDate ?? toJakartaDate(data.startAt!);
+    return prisma.consultation.create({
+        data: {
+            mode: 'offline',
+            topic: 'Bimbingan Uji',
+            requestedDate: new Date(`${date}T00:00:00.000Z`),
+            ...rest,
+        },
+    });
+};
 
 export async function seedPeople(app: INestApplication<App>) {
     const prisma = app.get(PrismaService);

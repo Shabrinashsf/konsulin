@@ -1,18 +1,14 @@
 import { Transform } from 'class-transformer';
 import {
     IsEnum,
-    IsISO8601,
     IsOptional,
     IsString,
     Length,
-    Matches,
     MaxLength,
 } from 'class-validator';
 import { ProjectType } from '../../../generated/prisma/client';
 import { trim } from '../../../shared/http/transforms';
-
-export const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-export const DATE_ONLY_MESSAGE = 'format tanggal harus YYYY-MM-DD';
+import { IsDateOnly } from '../../../shared/http/validators';
 
 export class CreateProjectDto {
     // project title
@@ -32,13 +28,11 @@ export class CreateProjectDto {
     type: ProjectType;
 
     // project start date YYYY-MM-DD
-    @Matches(DATE_ONLY, { message: DATE_ONLY_MESSAGE })
-    @IsISO8601({ strict: true })
+    @IsDateOnly()
     startDate: string;
 
     // project end date YYYY-MM-DD
     @IsOptional()
-    @Matches(DATE_ONLY, { message: DATE_ONLY_MESSAGE })
-    @IsISO8601({ strict: true })
+    @IsDateOnly()
     endDate?: string | null;
 }

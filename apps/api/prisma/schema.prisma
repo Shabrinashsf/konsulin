@@ -59,6 +59,14 @@ enum ConsultationMode {
   @@map("consultation_mode")
 }
 
+/// Who made the current time proposal of a requested consultation.
+enum ConsultationParty {
+  lecturer
+  student
+
+  @@map("consultation_party")
+}
+
 enum StorageDriver {
   local
   r2
@@ -105,7 +113,6 @@ model User {
   ownedProjects         Project[]           @relation("ProjectLecturer")
   memberships           ProjectMember[]
   invitations           ProjectInvitation[]
-  officeHours           OfficeHour[]
   blackoutDates         BlackoutDate[]
   lecturerConsultations Consultation[]      @relation("ConsultationLecturer")
   studentConsultations  Consultation[]      @relation("ConsultationStudent")
@@ -186,21 +193,6 @@ model ProjectInvitation {
 
 // ─── Jadwal dosen ───
 
-model OfficeHour {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lecturerId      String   @map("lecturer_id") @db.Uuid
-  dayOfWeek       Int      @map("day_of_week") @db.SmallInt
-  startTime       DateTime @map("start_time") @db.Time(6)
-  endTime         DateTime @map("end_time") @db.Time(6)
-  slotMinutes     Int      @map("slot_minutes") @db.SmallInt /// 15 | 30 | 45 | 60
-  defaultLocation String?  @map("default_location") @db.VarChar(255)
-
-  lecturer User @relation(fields: [lecturerId], references: [id])
-
-  @@index([lecturerId, dayOfWeek])
-  @@map("office_hours")
-}
-
 model BlackoutDate {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lecturerId String   @map("lecturer_id") @db.Uuid
@@ -225,8 +217,11 @@ model Consultation {
   mode           ConsultationMode
   topic          String             @db.VarChar(200)
   agenda         String?
-  startAt        DateTime           @map("start_at") @db.Timestamptz(6)
-  endAt          DateTime           @map("end_at") @db.Timestamptz(6)
+  note           String? /// student's note when requesting
+  requestedDate  DateTime           @map("requested_date") @db.Date /// WIB date requested by the student
+  proposedBy     ConsultationParty? @map("proposed_by") /// null = no time proposed yet (lecturer's turn)
+  startAt        DateTime?          @map("start_at") @db.Timestamptz(6) /// null until a time is proposed
+  endAt          DateTime?          @map("end_at") @db.Timestamptz(6)
   location       String?            @db.VarChar(255)
   statusReason   String?            @map("status_reason")
   summary        String?
@@ -240,6 +235,7 @@ model Consultation {
   student  User    @relation("ConsultationStudent", fields: [studentId], references: [id])
 
   @@index([lecturerId, startAt], map: "consultations_lecturer_start")
+  @@index([lecturerId, requestedDate], map: "consultations_lecturer_date")
   @@index([projectId, status], map: "consultations_project_status")
   @@index([studentId])
   @@map("consultations")

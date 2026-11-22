@@ -11,6 +11,7 @@ import { STATUS_CODES } from 'node:http';
 interface ErrorBody {
     message?: unknown;
     code?: unknown;
+    details?: unknown;
 }
 
 @Catch()
@@ -28,6 +29,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
                 error: STATUS_CODES[status] ?? 'Error',
                 message: body.message ?? e.message,
                 ...(body.code ? { code: body.code } : {}),
+                ...(body.details ? { details: body.details } : {}),
             });
         }
         this.logger.error(e instanceof Error ? e.stack : String(e));

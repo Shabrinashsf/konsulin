@@ -1,15 +1,8 @@
-import {
-    IsEnum,
-    IsIn,
-    IsISO8601,
-    IsOptional,
-    IsString,
-    Matches,
-} from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
 import { ProjectType } from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../shared/http/pagination-query.dto';
 import { DEGREES, type Degree } from '../../identity/degree';
-import { DATE_ONLY } from './create-project.dto';
+import { IsDateOnly } from '../../../shared/http/validators';
 
 export const PROJECT_SORTS = ['createdAt', 'title', 'startDate'] as const;
 
@@ -31,14 +24,12 @@ export class ProjectQueryDto extends PaginationQueryDto {
 
     // project start date
     @IsOptional()
-    @Matches(DATE_ONLY)
-    @IsISO8601({ strict: true })
+    @IsDateOnly()
     startFrom?: string;
 
     // project end date
     @IsOptional()
-    @Matches(DATE_ONLY)
-    @IsISO8601({ strict: true })
+    @IsDateOnly()
     startTo?: string;
 
     // sort by

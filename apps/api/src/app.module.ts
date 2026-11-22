@@ -8,6 +8,7 @@ import { type Env, validateEnv } from './config/env.schema';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './modules/identity/identity.module';
 import { ProjectModule } from './modules/project/project.module';
+import { ScheduleModule } from './modules/schedule/schedule.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { JwtAuthGuard } from './shared/auth/jwt-auth.guard';
 import { RolesGuard } from './shared/auth/roles.guard';
@@ -34,6 +35,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         PrismaModule,
         IdentityModule,
         ProjectModule,
+        ScheduleModule,
     ],
     controllers: [HealthController],
     providers: [

@@ -1,17 +1,15 @@
 import { Transform } from 'class-transformer';
 import {
     IsEnum,
-    IsISO8601,
     IsOptional,
     IsString,
     Length,
-    Matches,
     MaxLength,
     ValidateIf,
 } from 'class-validator';
 import { ProjectType } from '../../../generated/prisma/client';
 import { trim } from '../../../shared/http/transforms';
-import { DATE_ONLY, DATE_ONLY_MESSAGE } from './create-project.dto';
+import { IsDateOnly } from '../../../shared/http/validators';
 
 const isPresent = (_: unknown, v: unknown) => v !== undefined;
 
@@ -36,13 +34,11 @@ export class UpdateProjectDto {
 
     // project start date YYYY-MM-DD
     @ValidateIf(isPresent)
-    @Matches(DATE_ONLY, { message: DATE_ONLY_MESSAGE })
-    @IsISO8601({ strict: true })
+    @IsDateOnly()
     startDate?: string;
 
     // project end date YYYY-MM-DD
     @IsOptional()
-    @Matches(DATE_ONLY, { message: DATE_ONLY_MESSAGE })
-    @IsISO8601({ strict: true })
+    @IsDateOnly()
     endDate?: string | null;
 }
