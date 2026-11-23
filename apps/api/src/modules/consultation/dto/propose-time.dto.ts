@@ -1,7 +1,6 @@
 import { IsEnum, IsOptional } from 'class-validator';
 import { ConsultationMode } from '../../../generated/prisma/client';
-import { IsDateTime } from '../../../shared/http/validators';
-import { Text } from './consultation-body';
+import { IsDateTime, Text } from '../../../shared/http/validators';
 
 // a time proposal; location/mode only from the lecturer
 export class ProposeTimeDto {

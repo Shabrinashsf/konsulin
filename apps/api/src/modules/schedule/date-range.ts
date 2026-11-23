@@ -1,5 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
 import { addDays } from '../../shared/time/time';
+import { badRequest } from '../../shared/http/http-exception.filter';
 
 // every 'YYYY-MM-DD' from `from` to `to`, inclusive
 export function datesBetween(from: string, to: string) {
@@ -11,9 +11,9 @@ export function datesBetween(from: string, to: string) {
 // 400 unless from <= to and the inclusive range spans at most `maxDays`
 export function assertDateRange(from: string, to: string, maxDays: number) {
     if (to < from || addDays(from, maxDays - 1) < to) {
-        throw new BadRequestException({
-            message: `Rentang tanggal tidak valid (from ≤ to, maksimal ${maxDays} hari)`,
-            code: 'INVALID_DATE_RANGE',
-        });
+        throw badRequest(
+            'INVALID_DATE_RANGE',
+            `Rentang tanggal tidak valid (from ≤ to, maksimal ${maxDays} hari)`,
+        );
     }
 }

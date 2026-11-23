@@ -1,9 +1,4 @@
-import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import {
@@ -25,6 +20,7 @@ import { assertDateRange, datesBetween } from './date-range';
 import { BlackoutQueryDto } from './dto/blackout-query.dto';
 import { BlackoutRangeQueryDto } from './dto/blackout-range-query.dto';
 import { CreateBlackoutDateDto } from './dto/create-blackout-date.dto';
+import { badRequest, notFound } from '../../shared/http/http-exception.filter';
 
 export const MAX_BLACKOUT_DAYS = 90;
 
@@ -67,10 +63,10 @@ export class BlackoutDateService {
         assertDateRange(dto.from, dto.to, MAX_BLACKOUT_DAYS);
         const now = new Date();
         if (dto.from < toJakartaDate(now)) {
-            throw new BadRequestException({
-                message: 'Tanggal blacklist tidak boleh di masa lalu',
-                code: 'DATE_IN_PAST',
-            });
+            throw badRequest(
+                'DATE_IN_PAST',
+                'Tanggal blacklist tidak boleh di masa lalu',
+            );
         }
 
         const result = await this.blackouts.createRange({
@@ -119,10 +115,10 @@ export class BlackoutDateService {
     async remove(lecturerId: string, id: string) {
         const row = await this.blackouts.delete(id, lecturerId);
         if (!row) {
-            throw new NotFoundException({
-                message: 'Tanggal blacklist tidak ditemukan',
-                code: 'BLACKOUT_NOT_FOUND',
-            });
+            throw notFound(
+                'BLACKOUT_NOT_FOUND',
+                'Tanggal blacklist tidak ditemukan',
+            );
         }
         return toBlackoutView(row);
     }

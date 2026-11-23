@@ -1,4 +1,4 @@
-import { Text } from './consultation-body';
+import { Text } from '../../../shared/http/validators';
 
 export class CompleteConsultationDto {
     // logbook summary

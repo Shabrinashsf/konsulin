@@ -1,5 +1,13 @@
 import { applyDecorators } from '@nestjs/common';
-import { IsISO8601, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+    IsISO8601,
+    IsNotEmpty,
+    IsString,
+    Matches,
+    MaxLength,
+} from 'class-validator';
+import { trim } from './transforms';
 
 // for @ValidateIf: optional, but null is still validated (and rejected)
 export const isPresent = (_: unknown, v: unknown) => v !== undefined;
@@ -24,3 +32,7 @@ export const IsDateTime = () =>
         ),
         IsISO8601({ strict: true }),
     );
+
+// trimmed, non-empty text up to `max` characters
+export const Text = (max: number) =>
+    applyDecorators(Transform(trim), IsString(), IsNotEmpty(), MaxLength(max));

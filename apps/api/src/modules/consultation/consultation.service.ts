@@ -1,15 +1,15 @@
-import {
-    ConflictException,
-    ForbiddenException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma } from '../../generated/prisma/client';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 import { toCancelledEvent } from '../../shared/consultation/cancellation';
 import { CONSULTATION_CANCELLED } from '../../shared/consultation/consultation-cancelled.event';
-import { badRequest } from '../../shared/http/http-exception.filter';
+import {
+    badRequest,
+    conflict,
+    forbidden,
+    notFound,
+} from '../../shared/http/http-exception.filter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { formatDateOnly } from '../../shared/time/time';
 import { ProjectAccessService } from '../project/project-access.service';
@@ -53,9 +53,7 @@ import { RejectConsultationDto } from './dto/reject-consultation.dto';
 import { RescheduleConsultationDto } from './dto/reschedule-consultation.dto';
 import { ScheduleConsultationDto } from './dto/schedule-consultation.dto';
 
-const SHARED_TYPES = PROJECT_TYPES.filter(
-    (t) => PROJECT_TYPE_RULES[t].trackMode === 'shared',
-);
+const SHARED_TYPES = PROJECT_TYPES.filter((t) => !isIndividual(t));
 const trackModeOf = (c: ConsultationRow) =>
     PROJECT_TYPE_RULES[c.project.type].trackMode;
 
@@ -100,13 +98,9 @@ const MESSAGES: Record<StateError | TimeError, string> = {
         'Waktu bimbingan minimal 1 jam dari sekarang dan maksimal 60 hari ke depan',
 };
 
-const conflict = (code: StateError) =>
-    new ConflictException({ message: MESSAGES[code], code });
-const notFound = () =>
-    new NotFoundException({
-        message: 'Bimbingan tidak ditemukan',
-        code: 'CONSULTATION_NOT_FOUND',
-    });
+const stateConflict = (code: StateError) => conflict(code, MESSAGES[code]);
+const consultationNotFound = () =>
+    notFound('CONSULTATION_NOT_FOUND', 'Bimbingan tidak ditemukan');
 
 @Injectable()
 export class ConsultationService {
@@ -219,11 +213,10 @@ export class ConsultationService {
             now,
         );
         if (result === 'PENDING_EXISTS') {
-            throw new ConflictException({
-                message:
-                    'Masih ada pengajuan bimbingan yang menunggu di project ini',
-                code: 'CONSULTATION_PENDING_EXISTS',
-            });
+            throw conflict(
+                'CONSULTATION_PENDING_EXISTS',
+                'Masih ada pengajuan bimbingan yang menunggu di project ini',
+            );
         }
         if (result === 'DATE_BLACKLISTED') throw this.dateNotAvailable();
         return this.done(this.written(result), 'requested', 'student', now, {
@@ -334,7 +327,7 @@ export class ConsultationService {
         this.assertState(cancelError(c, now));
         const reason = dto.reason || null;
         const row = await this.consultations.cancel(id, reason, now);
-        if (!row) throw conflict('INVALID_TRANSITION');
+        if (!row) throw stateConflict('INVALID_TRANSITION');
         this.events.emit(
             CONSULTATION_CANCELLED,
             toCancelledEvent(row, reason, user.role),
@@ -355,16 +348,16 @@ export class ConsultationService {
     // Lecturer: own projects. Student: current member; individual = own only
     private async readable(id: string, user: AuthUser) {
         const c = await this.consultations.findById(id);
-        if (!c) throw notFound();
+        if (!c) throw consultationNotFound();
         if (user.role === 'lecturer') {
-            if (c.lecturerId !== user.id) throw notFound();
+            if (c.lecturerId !== user.id) throw consultationNotFound();
             return c;
         }
         if (!(await this.consultations.isMember(c.projectId, user.id))) {
-            throw notFound();
+            throw consultationNotFound();
         }
         if (isIndividual(c.project.type) && c.studentId !== user.id) {
-            throw notFound();
+            throw consultationNotFound();
         }
         return c;
     }
@@ -373,11 +366,10 @@ export class ConsultationService {
     private async writable(id: string, user: AuthUser) {
         const c = await this.readable(id, user);
         if (user.role === 'student' && c.studentId !== user.id) {
-            throw new ForbiddenException({
-                message:
-                    'Hanya mahasiswa pengaju yang dapat melakukan aksi ini',
-                code: 'NOT_CONSULTATION_OWNER',
-            });
+            throw forbidden(
+                'NOT_CONSULTATION_OWNER',
+                'Hanya mahasiswa pengaju yang dapat melakukan aksi ini',
+            );
         }
         return c;
     }
@@ -421,7 +413,7 @@ export class ConsultationService {
     }
 
     private assertState(error: StateError | null) {
-        if (error) throw conflict(error);
+        if (error) throw stateConflict(error);
     }
 
     // maps a repository write result to the row or an HTTP error
@@ -433,13 +425,13 @@ export class ConsultationService {
             );
         }
         if (result === 'OVERLAP') {
-            throw new ConflictException({
-                message: 'Jadwal bentrok dengan bimbingan lain',
-                code: 'CONSULTATION_OVERLAP',
-            });
+            throw conflict(
+                'CONSULTATION_OVERLAP',
+                'Jadwal bentrok dengan bimbingan lain',
+            );
         }
         if (result === 'STALE' || result === 'PENDING_EXISTS') {
-            throw conflict('INVALID_TRANSITION');
+            throw stateConflict('INVALID_TRANSITION');
         }
         return result;
     }

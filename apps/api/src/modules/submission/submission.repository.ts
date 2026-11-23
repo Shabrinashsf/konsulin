@@ -5,13 +5,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { Page } from '../../shared/http/pagination-query.dto';
 
 // folders of deleted projects, and deleted folders, do not exist
-const LIVE_FOLDER = {
+export const LIVE_FOLDER = {
     deletedAt: null,
     project: { deletedAt: null },
 } satisfies Prisma.SubmissionFolderWhereInput;
 
 // determine which columns are retrieved each time we load a folder
-const FOLDER_SELECT = {
+export const FOLDER_SELECT = {
     id: true,
     projectId: true,
     studentId: true,

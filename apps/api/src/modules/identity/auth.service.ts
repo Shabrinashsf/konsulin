@@ -1,5 +1,4 @@
 import {
-    BadRequestException,
     ConflictException,
     Injectable,
     UnauthorizedException,
@@ -16,6 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenRepository } from './refresh-token.repository';
 import { StudyProgramRepository } from './study-program.repository';
 import { type ProfileRow, UserRepository } from './user.repository';
+import { badRequest } from '../../shared/http/http-exception.filter';
 
 // change raw database response to a response form that can be send to client
 const toProfile = ({ studyProgram, ...u }: ProfileRow) => ({
@@ -43,10 +43,10 @@ export class AuthService {
 
     async register(dto: RegisterDto) {
         if (!(await this.studyPrograms.exists(dto.studyProgramId))) {
-            throw new BadRequestException({
-                message: 'Program studi tidak ditemukan',
-                code: 'STUDY_PROGRAM_NOT_FOUND',
-            });
+            throw badRequest(
+                'STUDY_PROGRAM_NOT_FOUND',
+                'Program studi tidak ditemukan',
+            );
         }
 
         const taken = await this.users.findByEmailOrNrp(dto.email, dto.nrp);

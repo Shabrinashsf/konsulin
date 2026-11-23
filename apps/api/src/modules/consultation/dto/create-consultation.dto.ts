@@ -8,8 +8,7 @@ import {
 } from 'class-validator';
 import { ConsultationMode } from '../../../generated/prisma/client';
 import { trim } from '../../../shared/http/transforms';
-import { IsDateOnly } from '../../../shared/http/validators';
-import { Text } from './consultation-body';
+import { IsDateOnly, Text } from '../../../shared/http/validators';
 
 export class CreateConsultationDto {
     // WIB date the student asks for

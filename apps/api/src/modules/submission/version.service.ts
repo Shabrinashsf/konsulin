@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import { Injectable, StreamableFile } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
-import { badRequest } from '../../shared/http/http-exception.filter';
+import { badRequest, notFound } from '../../shared/http/http-exception.filter';
 import {
     paginate,
     PaginationQueryDto,
@@ -119,10 +119,7 @@ export class VersionService {
     async download(id: string, user: AuthUser) {
         const v = await this.submissions.findVersion(id);
         if (!v || !(await this.folders.canRead(v.folder, user))) {
-            throw new NotFoundException({
-                message: 'Versi tidak ditemukan',
-                code: 'VERSION_NOT_FOUND',
-            });
+            throw notFound('VERSION_NOT_FOUND', 'Versi tidak ditemukan');
         }
         const stream = await this.storage.open(v.storageDriver, v.storedKey);
         return new StreamableFile(stream, {

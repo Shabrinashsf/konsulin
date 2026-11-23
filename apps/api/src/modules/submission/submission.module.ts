@@ -37,5 +37,7 @@ import { VersionService } from './version.service';
         VersionService,
         StorageService,
     ],
+    // folder access is reused by the feedback module
+    exports: [FolderService],
 })
 export class SubmissionModule {}

@@ -1,12 +1,12 @@
-import {
-    ConflictException,
-    ForbiddenException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { ProjectType } from '../../generated/prisma/client';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
-import { badRequest } from '../../shared/http/http-exception.filter';
+import {
+    badRequest,
+    conflict,
+    forbidden,
+    notFound,
+} from '../../shared/http/http-exception.filter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { toDate } from '../../shared/time/time';
 import { ProjectAccessService } from '../project/project-access.service';
@@ -18,10 +18,7 @@ import { type FolderRow, SubmissionRepository } from './submission.repository';
 import { toFolderView, toVersionView } from './views';
 
 export const folderNotFound = () =>
-    new NotFoundException({
-        message: 'Folder tidak ditemukan',
-        code: 'FOLDER_NOT_FOUND',
-    });
+    notFound('FOLDER_NOT_FOUND', 'Folder tidak ditemukan');
 
 @Injectable()
 export class FolderService {
@@ -114,11 +111,10 @@ export class FolderService {
         );
         if (result === 'GONE') throw folderNotFound();
         if (result === 'HAS_VERSIONS') {
-            throw new ConflictException({
-                message:
-                    'Folder yang sudah memiliki versi tidak dapat dihapus oleh mahasiswa',
-                code: 'FOLDER_HAS_VERSIONS',
-            });
+            throw conflict(
+                'FOLDER_HAS_VERSIONS',
+                'Folder yang sudah memiliki versi tidak dapat dihapus oleh mahasiswa',
+            );
         }
     }
 
@@ -146,10 +142,10 @@ export class FolderService {
     private async writable(id: string, user: AuthUser) {
         const folder = await this.readable(id, user);
         if (user.role === 'student' && folder.createdBy !== user.id) {
-            throw new ForbiddenException({
-                message: 'Hanya pembuat folder yang dapat melakukan aksi ini',
-                code: 'NOT_FOLDER_CREATOR',
-            });
+            throw forbidden(
+                'NOT_FOLDER_CREATOR',
+                'Hanya pembuat folder yang dapat melakukan aksi ini',
+            );
         }
         return folder;
     }
@@ -195,10 +191,9 @@ export class FolderService {
     }
 
     private lecturerOnly() {
-        return new ForbiddenException({
-            message:
-                'Hanya dosen yang dapat menentukan pemilik track dan deadline',
-            code: 'LECTURER_ONLY',
-        });
+        return forbidden(
+            'LECTURER_ONLY',
+            'Hanya dosen yang dapat menentukan pemilik track dan deadline',
+        );
     }
 }

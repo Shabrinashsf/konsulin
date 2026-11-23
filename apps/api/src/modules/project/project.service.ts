@@ -1,9 +1,4 @@
-import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 import {
@@ -27,6 +22,11 @@ import {
     ProjectRepository,
     type ProjectRow,
 } from './project.repository';
+import {
+    badRequest,
+    conflict,
+    notFound,
+} from '../../shared/http/http-exception.filter';
 
 // change raw database response to a response form that can be send to client
 export const toProjectView = ({ _count, ...p }: ProjectRow) => ({
@@ -47,10 +47,10 @@ const toMemberView = ({ joinedAt, student }: MemberRow) => ({
 // make sure end date are not before start date
 function assertDateRange(start: Date | null, end: Date | null) {
     if (start && end && end < start) {
-        throw new BadRequestException({
-            message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
-            code: 'INVALID_DATE_RANGE',
-        });
+        throw badRequest(
+            'INVALID_DATE_RANGE',
+            'Tanggal selesai tidak boleh sebelum tanggal mulai',
+        );
     }
 }
 
@@ -125,22 +125,20 @@ export class ProjectService {
                 project._count.members > 0 ||
                 (await this.invitations.countActivePending({ projectId })) > 0;
             if (locked) {
-                throw new ConflictException({
-                    message:
-                        'Tipe project tidak dapat diubah karena sudah ada anggota atau undangan pending',
-                    code: 'PROJECT_TYPE_LOCKED',
-                });
+                throw conflict(
+                    'PROJECT_TYPE_LOCKED',
+                    'Tipe project tidak dapat diubah karena sudah ada anggota atau undangan pending',
+                );
             }
             // folders were created for the current track mode
             const trackChanges =
                 PROJECT_TYPE_RULES[dto.type].trackMode !==
                 PROJECT_TYPE_RULES[project.type].trackMode;
             if (trackChanges && (await this.projects.hasFolders(projectId))) {
-                throw new ConflictException({
-                    message:
-                        'Tipe project tidak dapat diubah karena sudah ada folder submission',
-                    code: 'PROJECT_TYPE_LOCKED',
-                });
+                throw conflict(
+                    'PROJECT_TYPE_LOCKED',
+                    'Tipe project tidak dapat diubah karena sudah ada folder submission',
+                );
             }
         }
 
@@ -201,10 +199,10 @@ export class ProjectService {
             new Date(),
         );
         if (!cancelled) {
-            throw new NotFoundException({
-                message: 'Mahasiswa bukan anggota project ini',
-                code: 'MEMBER_NOT_FOUND',
-            });
+            throw notFound(
+                'MEMBER_NOT_FOUND',
+                'Mahasiswa bukan anggota project ini',
+            );
         }
         this.emitCancelled(cancelled, CANCEL_REASON.memberRemoved);
     }

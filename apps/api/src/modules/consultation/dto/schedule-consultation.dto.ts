@@ -2,8 +2,7 @@ import { Transform } from 'class-transformer';
 import { IsEnum, IsString, IsUUID, Length } from 'class-validator';
 import { ConsultationMode } from '../../../generated/prisma/client';
 import { trim } from '../../../shared/http/transforms';
-import { IsDateTime } from '../../../shared/http/validators';
-import { Text } from './consultation-body';
+import { IsDateTime, Text } from '../../../shared/http/validators';
 
 // lecturer schedules directly → approved
 export class ScheduleConsultationDto {

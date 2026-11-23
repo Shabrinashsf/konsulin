@@ -1,9 +1,4 @@
-import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { degreeOf, withDegree } from '../identity/degree';
@@ -24,6 +19,11 @@ import {
 import { ProjectAccessService } from './project-access.service';
 import { canJoin, PROJECT_TYPE_RULES } from './project-type-rules';
 import { ProjectRepository } from './project.repository';
+import {
+    badRequest,
+    conflict,
+    notFound,
+} from '../../shared/http/http-exception.filter';
 
 // change raw database response to a response form that can be send to client
 const toInvitationView = (inv: InvitationRow, now: Date) => ({
@@ -38,9 +38,6 @@ const toInvitationView = (inv: InvitationRow, now: Date) => ({
         typeLabel: PROJECT_TYPE_RULES[inv.project.type].label,
     },
 });
-
-const conflict = (code: string, message: string) =>
-    new ConflictException({ message, code });
 
 const TRANSITION_MESSAGES = {
     INVITATION_EXPIRED: 'Undangan sudah kedaluwarsa',
@@ -75,20 +72,17 @@ export class InvitationService {
         // check student and take student
         const student = await this.invitations.findStudent(studentId);
         if (!student) {
-            throw new NotFoundException({
-                message: 'Mahasiswa tidak ditemukan',
-                code: 'STUDENT_NOT_FOUND',
-            });
+            throw notFound('STUDENT_NOT_FOUND', 'Mahasiswa tidak ditemukan');
         }
 
         // check student degree and match it to project type
         const degree =
             student.studyProgram && degreeOf(student.studyProgram.name);
         if (!degree || !canJoin(project.type, degree)) {
-            throw new BadRequestException({
-                message: 'Jenjang mahasiswa tidak sesuai dengan tipe project',
-                code: 'DEGREE_MISMATCH',
-            });
+            throw badRequest(
+                'DEGREE_MISMATCH',
+                'Jenjang mahasiswa tidak sesuai dengan tipe project',
+            );
         }
 
         // make sure student are not a member yet
@@ -179,10 +173,7 @@ export class InvitationService {
     ) {
         const invitation = await this.invitations.findOne(id, scope);
         if (!invitation) {
-            throw new NotFoundException({
-                message: 'Undangan tidak ditemukan',
-                code: 'INVITATION_NOT_FOUND',
-            });
+            throw notFound('INVITATION_NOT_FOUND', 'Undangan tidak ditemukan');
         }
         return invitation;
     }
