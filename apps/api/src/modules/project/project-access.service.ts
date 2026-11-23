@@ -13,6 +13,11 @@ export class ProjectAccessService {
         return orFail(await this.projects.findVisible(projectId, user));
     }
 
+    // current member with an active account
+    isMember(projectId: string, studentId: string) {
+        return this.projects.isMember(projectId, studentId);
+    }
+
     // check whether user is an owner of the project
     async getOwnedProject(projectId: string, lecturerId: string) {
         return orFail(await this.projects.findOwned(projectId, lecturerId));

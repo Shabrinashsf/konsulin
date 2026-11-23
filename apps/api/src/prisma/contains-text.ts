@@ -1,5 +1,8 @@
+// LIKE wildcards taken literally
+export const escapeLike = (q: string) => q.replace(/[\\%_]/g, '\\$&');
+
 // for text filter, uppercas == lowercase
 export const containsText = (q: string) => ({
-    contains: q.replace(/[\\%_]/g, '\\$&'),
+    contains: escapeLike(q),
     mode: 'insensitive' as const,
 });

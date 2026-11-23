@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type ProjectType } from '../../generated/prisma/client';
+import { escapeLike } from '../../prisma/contains-text';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Page } from '../../shared/http/pagination-query.dto';
 import type { Degree } from '../identity/degree';
@@ -52,7 +53,6 @@ const SORT_COLUMNS: Record<MonitoringSort, string> = {
 };
 
 const when = (on: unknown, sql: Prisma.Sql) => (on ? sql : Prisma.empty);
-const likeText = (q: string) => `%${q.replace(/[\\%_]/g, '\\$&')}%`;
 
 @Injectable()
 export class MonitoringRepository {
@@ -78,6 +78,7 @@ export class MonitoringRepository {
 
 // one row per current member of the lecturer's projects
 function monitoredSql(f: MonitoringFilter) {
+    const like = `%${escapeLike(f.q ?? '')}%`;
     return Prisma.sql`
 WITH scope AS (
     -- (student, project) pairs that are counted
@@ -141,7 +142,7 @@ monitored AS (
         ORDER BY fo.deadline_at, fo.id LIMIT 1
     ) nd ON true
     WHERE TRUE
-    ${when(f.q, Prisma.sql`AND (u.name ILIKE ${likeText(f.q ?? '')} OR u.nrp ILIKE ${likeText(f.q ?? '')})`)}
+    ${when(f.q, Prisma.sql`AND (u.name ILIKE ${like} OR u.nrp ILIKE ${like})`)}
     ${when(f.studyProgramId, Prisma.sql`AND u.study_program_id = ${f.studyProgramId}::uuid`)}
     ${when(f.degree, Prisma.sql`AND sp.name LIKE ${`${f.degree} %`}`)}
     ${when(f.cohortYear !== undefined, Prisma.sql`AND u.cohort_year = ${f.cohortYear}`)}

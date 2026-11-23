@@ -163,14 +163,6 @@ export class ConsultationRepository {
         });
     }
 
-    async isMember(projectId: string, studentId: string) {
-        const member = await this.prisma.projectMember.findUnique({
-            where: { projectId_studentId: { projectId, studentId } },
-            select: { projectId: true },
-        });
-        return member !== null;
-    }
-
     findPage(
         where: Prisma.ConsultationWhereInput,
         orderBy: Prisma.ConsultationOrderByWithRelationInput,

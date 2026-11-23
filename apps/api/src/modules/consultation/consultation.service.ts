@@ -281,7 +281,7 @@ export class ConsultationService {
     ) {
         const now = new Date();
         await this.access.getOwnedProject(projectId, user.id);
-        if (!(await this.consultations.isMember(projectId, dto.studentId))) {
+        if (!(await this.access.isMember(projectId, dto.studentId))) {
             throw badRequest(
                 'STUDENT_NOT_MEMBER',
                 'Mahasiswa bukan anggota project ini',
@@ -353,7 +353,7 @@ export class ConsultationService {
             if (c.lecturerId !== user.id) throw consultationNotFound();
             return c;
         }
-        if (!(await this.consultations.isMember(c.projectId, user.id))) {
+        if (!(await this.access.isMember(c.projectId, user.id))) {
             throw consultationNotFound();
         }
         if (isIndividual(c.project.type) && c.studentId !== user.id) {

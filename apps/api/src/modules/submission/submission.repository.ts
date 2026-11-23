@@ -113,15 +113,6 @@ export class SubmissionRepository {
         });
     }
 
-    // current member with an active account
-    async isMember(projectId: string, studentId: string) {
-        const member = await this.prisma.projectMember.findFirst({
-            where: { projectId, studentId, student: { deletedAt: null } },
-            select: { projectId: true },
-        });
-        return member !== null;
-    }
-
     findFolderPage(
         f: FolderFilter,
         page: Page & { sort?: 'createdAt' | 'deadline' },

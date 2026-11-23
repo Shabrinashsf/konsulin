@@ -135,7 +135,7 @@ export class FolderService {
         if (isIndividual(folder.project.type) && folder.studentId !== user.id) {
             return false;
         }
-        return this.submissions.isMember(folder.projectId, user.id);
+        return this.access.isMember(folder.projectId, user.id);
     }
 
     // lecturer owner: any folder; student: only folders they created
@@ -172,7 +172,7 @@ export class FolderService {
                 'studentId wajib diisi untuk project individual',
             );
         }
-        if (!(await this.submissions.isMember(project.id, studentId))) {
+        if (!(await this.access.isMember(project.id, studentId))) {
             throw badRequest(
                 'STUDENT_NOT_MEMBER',
                 'Mahasiswa bukan anggota project ini',
