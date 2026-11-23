@@ -1,6 +1,9 @@
 import { applyDecorators } from '@nestjs/common';
 import { IsISO8601, Matches } from 'class-validator';
 
+// for @ValidateIf: optional, but null is still validated (and rejected)
+export const isPresent = (_: unknown, v: unknown) => v !== undefined;
+
 // 'YYYY-MM-DD' that is also a real calendar date
 export const IsDateOnly = () =>
     applyDecorators(

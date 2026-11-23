@@ -1,5 +1,6 @@
 import {
     ArgumentsHost,
+    BadRequestException,
     Catch,
     ExceptionFilter,
     HttpException,
@@ -13,6 +14,10 @@ interface ErrorBody {
     code?: unknown;
     details?: unknown;
 }
+
+// 400 with a machine-readable code
+export const badRequest = (code: string, message: string) =>
+    new BadRequestException({ message, code });
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {

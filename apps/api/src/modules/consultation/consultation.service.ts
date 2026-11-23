@@ -1,5 +1,4 @@
 import {
-    BadRequestException,
     ConflictException,
     ForbiddenException,
     Injectable,
@@ -10,10 +9,12 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 import { toCancelledEvent } from '../../shared/consultation/cancellation';
 import { CONSULTATION_CANCELLED } from '../../shared/consultation/consultation-cancelled.event';
+import { badRequest } from '../../shared/http/http-exception.filter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { formatDateOnly } from '../../shared/time/time';
 import { ProjectAccessService } from '../project/project-access.service';
 import {
+    isIndividual,
     PROJECT_TYPE_RULES,
     PROJECT_TYPES,
 } from '../project/project-type-rules';
@@ -101,8 +102,6 @@ const MESSAGES: Record<StateError | TimeError, string> = {
 
 const conflict = (code: StateError) =>
     new ConflictException({ message: MESSAGES[code], code });
-const badRequest = (code: string, message: string) =>
-    new BadRequestException({ message, code });
 const notFound = () =>
     new NotFoundException({
         message: 'Bimbingan tidak ditemukan',
@@ -364,7 +363,7 @@ export class ConsultationService {
         if (!(await this.consultations.isMember(c.projectId, user.id))) {
             throw notFound();
         }
-        if (trackModeOf(c) === 'individual' && c.studentId !== user.id) {
+        if (isIndividual(c.project.type) && c.studentId !== user.id) {
             throw notFound();
         }
         return c;
@@ -388,9 +387,7 @@ export class ConsultationService {
         user: AuthUser,
     ): Promise<Prisma.ConsultationWhereInput> {
         const project = await this.access.getVisibleProject(projectId, user);
-        const individual =
-            PROJECT_TYPE_RULES[project.type].trackMode === 'individual';
-        return user.role === 'student' && individual
+        return user.role === 'student' && isIndividual(project.type)
             ? { projectId, studentId: user.id }
             : { projectId };
     }

@@ -13,7 +13,7 @@ import {
 } from '../../shared/consultation/cancellation';
 import { CONSULTATION_CANCELLED } from '../../shared/consultation/consultation-cancelled.event';
 import { paginate } from '../../shared/http/pagination-query.dto';
-import { formatDateOnly, parseDateOnly } from '../../shared/time/time';
+import { formatDateOnly, parseDateOnly, toDate } from '../../shared/time/time';
 import { withDegree } from '../identity/degree';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { MemberQueryDto } from './dto/member-query.dto';
@@ -43,12 +43,6 @@ const toMemberView = ({ joinedAt, student }: MemberRow) => ({
     studyProgram: withDegree(student.studyProgram),
     joinedAt,
 });
-
-// a safe parseDateOnly to a optional field, change 'YYYY-MM-DD' to date object, it do nothing if nul or undefined
-function toDate(s: string | null | undefined): Date | null | undefined {
-    if (s === undefined) return undefined;
-    return s === null ? null : parseDateOnly(s);
-}
 
 // make sure end date are not before start date
 function assertDateRange(start: Date | null, end: Date | null) {
@@ -134,6 +128,17 @@ export class ProjectService {
                 throw new ConflictException({
                     message:
                         'Tipe project tidak dapat diubah karena sudah ada anggota atau undangan pending',
+                    code: 'PROJECT_TYPE_LOCKED',
+                });
+            }
+            // folders were created for the current track mode
+            const trackChanges =
+                PROJECT_TYPE_RULES[dto.type].trackMode !==
+                PROJECT_TYPE_RULES[project.type].trackMode;
+            if (trackChanges && (await this.projects.hasFolders(projectId))) {
+                throw new ConflictException({
+                    message:
+                        'Tipe project tidak dapat diubah karena sudah ada folder submission',
                     code: 'PROJECT_TYPE_LOCKED',
                 });
             }

@@ -10,6 +10,7 @@ import { IdentityModule } from './modules/identity/identity.module';
 import { ConsultationModule } from './modules/consultation/consultation.module';
 import { ProjectModule } from './modules/project/project.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
+import { SubmissionModule } from './modules/submission/submission.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { JwtAuthGuard } from './shared/auth/jwt-auth.guard';
 import { RolesGuard } from './shared/auth/roles.guard';
@@ -38,6 +39,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         ProjectModule,
         ScheduleModule,
         ConsultationModule,
+        SubmissionModule,
     ],
     controllers: [HealthController],
     providers: [

@@ -126,6 +126,13 @@ export class ProjectRepository {
         });
     }
 
+    async hasFolders(projectId: string) {
+        const count = await this.prisma.submissionFolder.count({
+            where: { projectId, deletedAt: null },
+        });
+        return count > 0;
+    }
+
     // active consultations of the project are cancelled with it
     softDelete(projectId: string, lecturerId: string, now: Date) {
         return this.prisma.$transaction(async (tx) => {

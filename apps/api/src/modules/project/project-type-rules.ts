@@ -40,19 +40,30 @@ export const PROJECT_TYPE_RULES = {
         requiredDegree: 'S3',
         trackMode: 'individual',
     },
-    research: { label: 'Riset', requiredDegree: null, trackMode: 'shared' },
+    research: {
+        label: 'Riset',
+        requiredDegree: null,
+        trackMode: 'shared',
+    },
     publication: {
         label: 'Publikasi Ilmiah',
         requiredDegree: null,
         trackMode: 'shared',
     },
-    competition: { label: 'Lomba', requiredDegree: null, trackMode: 'shared' },
+    competition: {
+        label: 'Lomba',
+        requiredDegree: null,
+        trackMode: 'shared',
+    },
     external_project: {
         label: 'Project Luar',
         requiredDegree: null,
         trackMode: 'shared',
     },
 } as const satisfies Record<ProjectType, ProjectTypeRule>;
+
+export const isIndividual = (type: ProjectType) =>
+    PROJECT_TYPE_RULES[type].trackMode === 'individual';
 
 export const PROJECT_TYPES = Object.keys(PROJECT_TYPE_RULES) as ProjectType[];
 

@@ -9,9 +9,7 @@ import {
 } from 'class-validator';
 import { ProjectType } from '../../../generated/prisma/client';
 import { trim } from '../../../shared/http/transforms';
-import { IsDateOnly } from '../../../shared/http/validators';
-
-const isPresent = (_: unknown, v: unknown) => v !== undefined;
+import { IsDateOnly, isPresent } from '../../../shared/http/validators';
 
 export class UpdateProjectDto {
     // project title
