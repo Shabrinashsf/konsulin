@@ -7,6 +7,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { type Env, validateEnv } from './config/env.schema';
 import { HealthController } from './health/health.controller';
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { ConsultationModule } from './modules/consultation/consultation.module';
 import { ProjectModule } from './modules/project/project.module';
@@ -42,6 +43,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         ConsultationModule,
         SubmissionModule,
         FeedbackModule,
+        MonitoringModule,
     ],
     controllers: [HealthController],
     providers: [
