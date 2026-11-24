@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule as CronModule } from '@nestjs/schedule';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { type Env, validateEnv } from './config/env.schema';
 import { HealthController } from './health/health.controller';
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { NotificationModule } from './modules/notification/notification.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { ConsultationModule } from './modules/consultation/consultation.module';
@@ -26,6 +28,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         }),
         ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
         EventEmitterModule.forRoot(),
+        CronModule.forRoot(),
         JwtModule.registerAsync({
             global: true,
             inject: [ConfigService],
@@ -44,6 +47,7 @@ import { RolesGuard } from './shared/auth/roles.guard';
         SubmissionModule,
         FeedbackModule,
         MonitoringModule,
+        NotificationModule,
     ],
     controllers: [HealthController],
     providers: [

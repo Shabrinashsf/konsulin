@@ -1,5 +1,6 @@
 import type { Prisma } from '../../generated/prisma/client';
 import { formatDateOnly, parseDateOnly, toJakartaDate } from '../time/time';
+import { PROJECT_TYPE_RULES } from '../../modules/project/project-type-rules';
 import { ConsultationCancelledEvent } from './consultation-cancelled.event';
 
 export const CANCEL_REASON = {
@@ -15,8 +16,10 @@ export const CANCELLED_SELECT = {
     requestedDate: true,
     startAt: true,
     endAt: true,
-    project: { select: { id: true, title: true } },
-    lecturer: { select: { id: true, name: true } },
+    location: true,
+    icsSequence: true,
+    project: { select: { id: true, title: true, type: true } },
+    lecturer: { select: { id: true, name: true, email: true } },
     student: { select: { id: true, name: true, email: true } },
 } satisfies Prisma.ConsultationSelect;
 
@@ -65,12 +68,21 @@ export const toCancelledEvent = (
 ) =>
     new ConsultationCancelledEvent(
         c.id,
-        c.project,
+        {
+            id: c.project.id,
+            title: c.project.title,
+            trackMode: PROJECT_TYPE_RULES[c.project.type].trackMode,
+        },
         c.lecturer,
         c.student,
+        c.topic,
         formatDateOnly(c.requestedDate),
         c.startAt,
         c.endAt,
+        c.location,
+        // only an approved consultation reached the calendars
+        c.status === 'approved',
+        c.icsSequence,
         reason,
         cancelledBy,
     );

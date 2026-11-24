@@ -1,3 +1,5 @@
+import type { ProjectType } from '../../generated/prisma/client';
+
 export const FEEDBACK_CREATED = 'feedback.created';
 
 // the notification module emails the track owner (individual) or every active member (shared)
@@ -12,7 +14,7 @@ export class FeedbackCreatedEvent {
             title: string;
             studentId: string | null;
         },
-        readonly project: { id: string; title: string; type: string },
+        readonly project: { id: string; title: string; type: ProjectType },
         readonly lecturer: { id: string; name: string },
     ) {}
 }

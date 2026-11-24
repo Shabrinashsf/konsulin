@@ -31,14 +31,16 @@ const toBlackoutView = (r: BlackoutRow) => ({
 });
 
 // affected consultation as shown to the lecturer (no student email)
-const toAffectedView = ({ lecturer, student, ...c }: CancelledRow) => {
-    void lecturer;
-    return {
-        ...c,
-        requestedDate: formatDateOnly(c.requestedDate),
-        student: { id: student.id, name: student.name },
-    };
-};
+const toAffectedView = (c: CancelledRow) => ({
+    id: c.id,
+    status: c.status,
+    topic: c.topic,
+    requestedDate: formatDateOnly(c.requestedDate),
+    startAt: c.startAt,
+    endAt: c.endAt,
+    project: { id: c.project.id, title: c.project.title },
+    student: { id: c.student.id, name: c.student.name },
+});
 
 @Injectable()
 export class BlackoutDateService {

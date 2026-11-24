@@ -12,4 +12,7 @@ process.env.UPLOAD_DIR = uploads;
 process.env.UPLOAD_TMP_DIR = join(uploads, 'tmp');
 process.env.MAX_UPLOAD_MB = '1';
 
+// emails are captured in tests, never sent
+process.env.SMTP_USER = '';
+
 process.env.JWT_ACCESS_SECRET ??= 'test-access-secret-at-least-32-chars!!';
