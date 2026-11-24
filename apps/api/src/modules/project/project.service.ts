@@ -22,14 +22,18 @@ import {
     ProjectRepository,
     type ProjectRow,
 } from './project.repository';
-import {
-    badRequest,
-    conflict,
-    notFound,
-} from '../../shared/http/http-exception.filter';
+import { apiError } from '../../shared/http/errors';
+import type {
+    MemberResponseDto,
+    ProjectDetailResponseDto,
+    ProjectResponseDto,
+} from './dto/project-response.dto';
 
 // change raw database response to a response form that can be send to client
-export const toProjectView = ({ _count, ...p }: ProjectRow) => ({
+export const toProjectView = ({
+    _count,
+    ...p
+}: ProjectRow): ProjectResponseDto => ({
     ...p,
     ...PROJECT_TYPE_RULES[p.type],
     startDate: p.startDate && formatDateOnly(p.startDate),
@@ -38,7 +42,7 @@ export const toProjectView = ({ _count, ...p }: ProjectRow) => ({
 });
 
 // change raw database response to a response form that can be send to client
-const toMemberView = ({ joinedAt, student }: MemberRow) => ({
+const toMemberView = ({ joinedAt, student }: MemberRow): MemberResponseDto => ({
     ...student,
     studyProgram: withDegree(student.studyProgram),
     joinedAt,
@@ -47,10 +51,7 @@ const toMemberView = ({ joinedAt, student }: MemberRow) => ({
 // make sure end date are not before start date
 function assertDateRange(start: Date | null, end: Date | null) {
     if (start && end && end < start) {
-        throw badRequest(
-            'INVALID_DATE_RANGE',
-            'Tanggal selesai tidak boleh sebelum tanggal mulai',
-        );
+        throw apiError('INVALID_DATE_RANGE');
     }
 }
 
@@ -92,7 +93,10 @@ export class ProjectService {
         return toProjectView(project);
     }
 
-    async get(projectId: string, user: AuthUser) {
+    async get(
+        projectId: string,
+        user: AuthUser,
+    ): Promise<ProjectDetailResponseDto> {
         // check access and take project
         const project = await this.access.getVisibleProject(projectId, user);
 
@@ -125,20 +129,17 @@ export class ProjectService {
                 project._count.members > 0 ||
                 (await this.invitations.countActivePending({ projectId })) > 0;
             if (locked) {
-                throw conflict(
-                    'PROJECT_TYPE_LOCKED',
-                    'Tipe project tidak dapat diubah karena sudah ada anggota atau undangan pending',
-                );
+                throw apiError('PROJECT_TYPE_LOCKED');
             }
             // folders were created for the current track mode
             const trackChanges =
                 PROJECT_TYPE_RULES[dto.type].trackMode !==
                 PROJECT_TYPE_RULES[project.type].trackMode;
             if (trackChanges && (await this.projects.hasFolders(projectId))) {
-                throw conflict(
-                    'PROJECT_TYPE_LOCKED',
-                    'Tipe project tidak dapat diubah karena sudah ada folder submission',
-                );
+                throw apiError('PROJECT_TYPE_LOCKED', {
+                    message:
+                        'Tipe project tidak dapat diubah karena sudah ada folder submission',
+                });
             }
         }
 
@@ -199,10 +200,7 @@ export class ProjectService {
             new Date(),
         );
         if (!cancelled) {
-            throw notFound(
-                'MEMBER_NOT_FOUND',
-                'Mahasiswa bukan anggota project ini',
-            );
+            throw apiError('MEMBER_NOT_FOUND');
         }
         this.emitCancelled(cancelled, CANCEL_REASON.memberRemoved);
     }

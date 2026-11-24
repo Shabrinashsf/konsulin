@@ -11,7 +11,13 @@ import {
     UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import {
+    ApiBearerAuth,
+    ApiBody,
+    ApiConsumes,
+    ApiOkResponse,
+    ApiTags,
+} from '@nestjs/swagger';
 import {
     type AuthUser,
     CurrentUser,
@@ -21,15 +27,25 @@ import { PaginationQueryDto } from '../../shared/http/pagination-query.dto';
 import { UploadVersionDto } from './dto/upload-version.dto';
 import { RemoveTmpFile, UploadAccessGuard } from './upload';
 import { VersionService } from './version.service';
+import {
+    ApiDataResponse,
+    ApiErrors,
+    ApiPageResponse,
+} from '../../shared/http/api-docs';
+import { VersionResponseDto } from './dto/submission-response.dto';
+import { FILE_TYPES } from './file-signature';
 
 @ApiTags('Submissions')
 @ApiBearerAuth()
+@ApiErrors('UNAUTHORIZED')
 @Controller()
 export class VersionController {
     constructor(private readonly versions: VersionService) {}
 
     // -- GET /folders/:folderId/versions -> versions, newest first
     @Get('folders/:folderId/versions')
+    @ApiPageResponse(VersionResponseDto)
+    @ApiErrors('VALIDATION', 'FOLDER_NOT_FOUND')
     list(
         @Param('folderId', ParseUUIDPipe) folderId: string,
         @CurrentUser() user: AuthUser,
@@ -54,6 +70,16 @@ export class VersionController {
             },
         },
     })
+    @ApiDataResponse(VersionResponseDto, 201)
+    @ApiErrors(
+        'VALIDATION',
+        'ROLE',
+        'FOLDER_NOT_FOUND',
+        'TOO_LARGE',
+        'FILE_REQUIRED',
+        'INVALID_FILE_TYPE',
+        'STORAGE_UNAVAILABLE',
+    )
     upload(
         @Param('folderId', ParseUUIDPipe) folderId: string,
         @CurrentUser() user: AuthUser,
@@ -65,6 +91,17 @@ export class VersionController {
 
     // -- GET /versions/:versionId/download -> the file, streamed
     @Get('versions/:versionId/download')
+    @ApiOkResponse({
+        description:
+            "The file, with `Content-Disposition: attachment; filename*=UTF-8''…`.",
+        content: Object.fromEntries(
+            FILE_TYPES.map((type) => [
+                type,
+                { schema: { type: 'string', format: 'binary' } },
+            ]),
+        ),
+    })
+    @ApiErrors('VALIDATION', 'VERSION_NOT_FOUND', 'STORAGE_UNAVAILABLE')
     download(
         @Param('versionId', ParseUUIDPipe) id: string,
         @CurrentUser() user: AuthUser,

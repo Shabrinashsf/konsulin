@@ -6,7 +6,8 @@ import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { FEEDBACK_CREATED, FeedbackCreatedEvent } from './feedback-events';
 import { FeedbackRepository } from './feedback.repository';
-import { conflict, notFound } from '../../shared/http/http-exception.filter';
+import { apiError } from '../../shared/http/errors';
+import type { FeedbackResponseDto } from './dto/feedback-response.dto';
 
 @Injectable()
 export class FeedbackService {
@@ -16,13 +17,20 @@ export class FeedbackService {
         private readonly events: EventEmitter2,
     ) {}
 
-    async list(versionId: string, user: AuthUser) {
+    async list(
+        versionId: string,
+        user: AuthUser,
+    ): Promise<FeedbackResponseDto[]> {
         await this.readableVersion(versionId, user);
         return this.feedbacks.findByVersion(versionId);
     }
 
     // any version the lecturer can see, old ones included
-    async create(versionId: string, user: AuthUser, dto: CreateFeedbackDto) {
+    async create(
+        versionId: string,
+        user: AuthUser,
+        dto: CreateFeedbackDto,
+    ): Promise<FeedbackResponseDto> {
         const version = await this.readableVersion(versionId, user);
         const items = (dto.revisionItems ?? []).map((i) => i.description);
         const feedback = await this.feedbacks.create(
@@ -53,7 +61,11 @@ export class FeedbackService {
     }
 
     // only the content; revision items stay as created
-    async update(id: string, user: AuthUser, dto: UpdateFeedbackDto) {
+    async update(
+        id: string,
+        user: AuthUser,
+        dto: UpdateFeedbackDto,
+    ): Promise<FeedbackResponseDto> {
         await this.readableFeedback(id, user);
         return this.feedbacks.updateContent(id, dto.content);
     }
@@ -63,10 +75,7 @@ export class FeedbackService {
         const result = await this.feedbacks.delete(id);
         if (result === 'GONE') throw this.feedbackNotFound();
         if (result === 'STALE') {
-            throw conflict(
-                'FEEDBACK_HAS_PROGRESS',
-                'Feedback tidak dapat dihapus karena item revisinya sudah dikerjakan',
-            );
+            throw apiError('FEEDBACK_HAS_PROGRESS');
         }
     }
 
@@ -75,7 +84,7 @@ export class FeedbackService {
     private async readableVersion(id: string, user: AuthUser) {
         const version = await this.feedbacks.findVersion(id);
         if (!version || !(await this.folders.canRead(version.folder, user))) {
-            throw notFound('VERSION_NOT_FOUND', 'Versi tidak ditemukan');
+            throw apiError('VERSION_NOT_FOUND');
         }
         return version;
     }
@@ -92,6 +101,6 @@ export class FeedbackService {
     }
 
     private feedbackNotFound() {
-        return notFound('FEEDBACK_NOT_FOUND', 'Feedback tidak ditemukan');
+        return apiError('FEEDBACK_NOT_FOUND');
     }
 }

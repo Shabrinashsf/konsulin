@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 import { type ProjectRow, ProjectRepository } from './project.repository';
-import { notFound } from '../../shared/http/http-exception.filter';
+import { apiError } from '../../shared/http/errors';
 
 // policy project access, not an owner or a member -> 404
 @Injectable()
@@ -26,7 +26,7 @@ export class ProjectAccessService {
 
 function orFail(project: ProjectRow | null) {
     if (!project) {
-        throw notFound('PROJECT_NOT_FOUND', 'Project tidak ditemukan');
+        throw apiError('PROJECT_NOT_FOUND');
     }
     return project;
 }

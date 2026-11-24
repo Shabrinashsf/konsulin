@@ -7,7 +7,12 @@ import {
     Req,
     Res,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+    ApiBearerAuth,
+    ApiCookieAuth,
+    ApiNoContentResponse,
+    ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import {
@@ -18,6 +23,11 @@ import {
 import { AuthService, type IssuedTokens } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ApiDataResponse, ApiErrors } from '../../shared/http/api-docs';
+import {
+    ProfileResponseDto,
+    TokenResponseDto,
+} from './dto/identity-response.dto';
 
 const REFRESH_COOKIE = 'refresh_token';
 const REFRESH_COOKIE_OPTIONS: CookieOptions = {
@@ -40,6 +50,14 @@ export class AuthController {
     @Public()
     @Throttle(AUTH_THROTTLE)
     @Post('register')
+    @ApiDataResponse(ProfileResponseDto, 201)
+    @ApiErrors(
+        'VALIDATION',
+        'STUDY_PROGRAM_NOT_FOUND',
+        'EMAIL_TAKEN',
+        'NRP_TAKEN',
+        'RATE_LIMIT',
+    )
     register(@Body() dto: RegisterDto) {
         return this.auth.register(dto);
     }
@@ -49,6 +67,8 @@ export class AuthController {
     @Throttle(AUTH_THROTTLE)
     @Post('login')
     @HttpCode(200)
+    @ApiDataResponse(TokenResponseDto)
+    @ApiErrors('VALIDATION', 'BAD_CREDENTIALS', 'RATE_LIMIT')
     async login(
         @Body() dto: LoginDto,
         @Res({ passthrough: true }) res: Response,
@@ -60,6 +80,9 @@ export class AuthController {
     @Public()
     @Post('refresh')
     @HttpCode(200)
+    @ApiCookieAuth('refresh_token')
+    @ApiDataResponse(TokenResponseDto)
+    @ApiErrors('INVALID_REFRESH')
     async refresh(
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
@@ -74,6 +97,9 @@ export class AuthController {
     @ApiBearerAuth()
     @Post('logout')
     @HttpCode(204)
+    @ApiCookieAuth('refresh_token')
+    @ApiNoContentResponse()
+    @ApiErrors('UNAUTHORIZED')
     async logout(
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
@@ -85,6 +111,8 @@ export class AuthController {
     // -- GET /auth/me
     @ApiBearerAuth()
     @Get('me')
+    @ApiDataResponse(ProfileResponseDto)
+    @ApiErrors('UNAUTHORIZED')
     me(@CurrentUser() user: AuthUser) {
         return this.auth.me(user.id);
     }

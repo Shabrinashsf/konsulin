@@ -6,6 +6,7 @@ import { calculateAvailableDays, MAX_RANGE_DAYS } from './available-days';
 import { assertDateRange } from './date-range';
 import { BlackoutDateRepository } from './blackout-date.repository';
 import { AvailableDaysQueryDto } from './dto/available-days-query.dto';
+import type { DayStatusResponseDto } from './dto/schedule-response.dto';
 
 @Injectable()
 export class AvailableDayService {
@@ -15,7 +16,11 @@ export class AvailableDayService {
     ) {}
 
     // status of each date for requesting the project's lecturer (owner or member only)
-    async list(projectId: string, user: AuthUser, q: AvailableDaysQueryDto) {
+    async list(
+        projectId: string,
+        user: AuthUser,
+        q: AvailableDaysQueryDto,
+    ): Promise<DayStatusResponseDto[]> {
         assertDateRange(q.from, q.to, MAX_RANGE_DAYS);
 
         const project = await this.access.getVisibleProject(projectId, user);

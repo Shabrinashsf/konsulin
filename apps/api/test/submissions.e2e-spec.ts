@@ -1268,7 +1268,7 @@ describe('Submissions (e2e)', () => {
             expect((await download(v.id)).status).toBe(404);
         });
 
-        it('a version stored on R2 is unavailable until the adapter exists (503)', async () => {
+        it('a version stored on R2 is unavailable without R2 credentials (503)', async () => {
             const folder = await folderRow();
             const v = await versionRow(folder.id, 1, { storageDriver: 'r2' });
             const res = await download(v.id);

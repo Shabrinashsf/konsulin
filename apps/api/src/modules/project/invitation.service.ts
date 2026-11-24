@@ -19,14 +19,14 @@ import {
 import { ProjectAccessService } from './project-access.service';
 import { canJoin, PROJECT_TYPE_RULES } from './project-type-rules';
 import { ProjectRepository } from './project.repository';
-import {
-    badRequest,
-    conflict,
-    notFound,
-} from '../../shared/http/http-exception.filter';
+import { apiError } from '../../shared/http/errors';
+import type { InvitationResponseDto } from './dto/project-response.dto';
 
 // change raw database response to a response form that can be send to client
-const toInvitationView = (inv: InvitationRow, now: Date) => ({
+const toInvitationView = (
+    inv: InvitationRow,
+    now: Date,
+): InvitationResponseDto => ({
     ...inv,
     status: viewStatus(inv, now),
     student: {
@@ -38,11 +38,6 @@ const toInvitationView = (inv: InvitationRow, now: Date) => ({
         typeLabel: PROJECT_TYPE_RULES[inv.project.type].label,
     },
 });
-
-const TRANSITION_MESSAGES = {
-    INVITATION_EXPIRED: 'Undangan sudah kedaluwarsa',
-    INVITATION_NOT_PENDING: 'Undangan sudah tidak berstatus pending',
-} as const;
 
 @Injectable()
 export class InvitationService {
@@ -72,23 +67,20 @@ export class InvitationService {
         // check student and take student
         const student = await this.invitations.findStudent(studentId);
         if (!student) {
-            throw notFound('STUDENT_NOT_FOUND', 'Mahasiswa tidak ditemukan');
+            throw apiError('STUDENT_NOT_FOUND');
         }
 
         // check student degree and match it to project type
         const degree =
             student.studyProgram && degreeOf(student.studyProgram.name);
         if (!degree || !canJoin(project.type, degree)) {
-            throw badRequest(
-                'DEGREE_MISMATCH',
-                'Jenjang mahasiswa tidak sesuai dengan tipe project',
-            );
+            throw apiError('DEGREE_MISMATCH');
         }
 
         // make sure student are not a member yet
         const now = new Date();
         if (await this.projects.isMember(projectId, studentId)) {
-            throw conflict('ALREADY_MEMBER', 'Mahasiswa sudah menjadi anggota');
+            throw apiError('ALREADY_MEMBER');
         }
 
         // make sure that student have 0 pending invitation
@@ -98,10 +90,7 @@ export class InvitationService {
                 now,
             )) > 0
         ) {
-            throw conflict(
-                'INVITATION_ALREADY_PENDING',
-                'Mahasiswa masih punya undangan pending di project ini',
-            );
+            throw apiError('INVITATION_ALREADY_PENDING');
         }
 
         // create invitation
@@ -173,7 +162,7 @@ export class InvitationService {
     ) {
         const invitation = await this.invitations.findOne(id, scope);
         if (!invitation) {
-            throw notFound('INVITATION_NOT_FOUND', 'Undangan tidak ditemukan');
+            throw apiError('INVITATION_NOT_FOUND');
         }
         return invitation;
     }
@@ -185,7 +174,7 @@ export class InvitationService {
     ) {
         const now = new Date();
         const error = transitionError(invitation, now);
-        if (error) throw conflict(error, TRANSITION_MESSAGES[error]);
+        if (error) throw apiError(error);
 
         const updated = await this.invitations.transition(
             invitation,
@@ -193,10 +182,7 @@ export class InvitationService {
             now,
         );
         if (!updated) {
-            throw conflict(
-                'INVITATION_NOT_PENDING',
-                TRANSITION_MESSAGES.INVITATION_NOT_PENDING,
-            );
+            throw apiError('INVITATION_NOT_PENDING');
         }
         return toInvitationView(updated, now);
     }

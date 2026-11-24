@@ -7,6 +7,13 @@ const DOCX_ENTRY = 'word/document.xml';
 // the ZIP central directory (entry names) sits at the end of the file
 const TAIL_BYTES = 1024 * 1024;
 
+const PDF_TYPE = 'application/pdf';
+const ZIP_TYPE = 'application/zip';
+const DOCX_TYPE =
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+// every type a version can have
+export const FILE_TYPES = [PDF_TYPE, DOCX_TYPE, ZIP_TYPE];
+
 // the extension decides the type, the content must agree
 export function matchFileType(
     ext: string,
@@ -16,13 +23,11 @@ export function matchFileType(
     const zip = head.subarray(0, 4).equals(ZIP);
     switch (ext) {
         case '.pdf':
-            return head.subarray(0, 5).equals(PDF) ? 'application/pdf' : null;
+            return head.subarray(0, 5).equals(PDF) ? PDF_TYPE : null;
         case '.zip':
-            return zip ? 'application/zip' : null;
+            return zip ? ZIP_TYPE : null;
         case '.docx':
-            return zip && tail.includes(DOCX_ENTRY)
-                ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                : null;
+            return zip && tail.includes(DOCX_ENTRY) ? DOCX_TYPE : null;
         default:
             return null;
     }

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import {
@@ -20,18 +20,24 @@ import { assertDateRange, datesBetween } from './date-range';
 import { BlackoutQueryDto } from './dto/blackout-query.dto';
 import { BlackoutRangeQueryDto } from './dto/blackout-range-query.dto';
 import { CreateBlackoutDateDto } from './dto/create-blackout-date.dto';
-import { badRequest, notFound } from '../../shared/http/http-exception.filter';
+import { apiError } from '../../shared/http/errors';
+import type {
+    AffectedConsultationDto,
+    BlackoutCreatedResponseDto,
+    BlackoutDeletedResponseDto,
+    BlackoutResponseDto,
+} from './dto/schedule-response.dto';
 
 export const MAX_BLACKOUT_DAYS = 90;
 
 // change raw database response to a response form that can be send to client
-const toBlackoutView = (r: BlackoutRow) => ({
+const toBlackoutView = (r: BlackoutRow): BlackoutResponseDto => ({
     ...r,
     date: formatDateOnly(r.date),
 });
 
 // affected consultation as shown to the lecturer (no student email)
-const toAffectedView = (c: CancelledRow) => ({
+const toAffectedView = (c: CancelledRow): AffectedConsultationDto => ({
     id: c.id,
     status: c.status,
     topic: c.topic,
@@ -61,14 +67,14 @@ export class BlackoutDateService {
         return paginate(rows.map(toBlackoutView), total, q);
     }
 
-    async create(lecturerId: string, dto: CreateBlackoutDateDto) {
+    async create(
+        lecturerId: string,
+        dto: CreateBlackoutDateDto,
+    ): Promise<BlackoutCreatedResponseDto> {
         assertDateRange(dto.from, dto.to, MAX_BLACKOUT_DAYS);
         const now = new Date();
         if (dto.from < toJakartaDate(now)) {
-            throw badRequest(
-                'DATE_IN_PAST',
-                'Tanggal blacklist tidak boleh di masa lalu',
-            );
+            throw apiError('DATE_IN_PAST');
         }
 
         const result = await this.blackouts.createRange({
@@ -83,10 +89,7 @@ export class BlackoutDateService {
 
         // show what would be cancelled
         if ('conflict' in result) {
-            throw new ConflictException({
-                message:
-                    'Rentang ini mengenai bimbingan aktif. Kirim ulang dengan cancelConsultations: true untuk membatalkannya.',
-                code: 'BLACKOUT_HAS_CONSULTATION',
+            throw apiError('BLACKOUT_HAS_CONSULTATION', {
                 details: { consultations: result.conflict.map(toAffectedView) },
             });
         }
@@ -104,7 +107,10 @@ export class BlackoutDateService {
         };
     }
 
-    async removeRange(lecturerId: string, q: BlackoutRangeQueryDto) {
+    async removeRange(
+        lecturerId: string,
+        q: BlackoutRangeQueryDto,
+    ): Promise<BlackoutDeletedResponseDto> {
         assertDateRange(q.from, q.to, MAX_BLACKOUT_DAYS);
         const deleted = await this.blackouts.deleteRange(
             lecturerId,
@@ -117,10 +123,7 @@ export class BlackoutDateService {
     async remove(lecturerId: string, id: string) {
         const row = await this.blackouts.delete(id, lecturerId);
         if (!row) {
-            throw notFound(
-                'BLACKOUT_NOT_FOUND',
-                'Tanggal blacklist tidak ditemukan',
-            );
+            throw apiError('BLACKOUT_NOT_FOUND');
         }
         return toBlackoutView(row);
     }

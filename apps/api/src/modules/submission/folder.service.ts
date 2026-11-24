@@ -1,12 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ProjectType } from '../../generated/prisma/client';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
-import {
-    badRequest,
-    conflict,
-    forbidden,
-    notFound,
-} from '../../shared/http/http-exception.filter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { toDate } from '../../shared/time/time';
 import { ProjectAccessService } from '../project/project-access.service';
@@ -16,9 +10,10 @@ import { FolderQueryDto } from './dto/folder-query.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
 import { type FolderRow, SubmissionRepository } from './submission.repository';
 import { toFolderView, toVersionView } from './views';
+import { apiError } from '../../shared/http/errors';
+import type { FolderDetailResponseDto } from './dto/submission-response.dto';
 
-export const folderNotFound = () =>
-    notFound('FOLDER_NOT_FOUND', 'Folder tidak ditemukan');
+export const folderNotFound = () => apiError('FOLDER_NOT_FOUND');
 
 @Injectable()
 export class FolderService {
@@ -68,7 +63,7 @@ export class FolderService {
         return toFolderView(row, now);
     }
 
-    async get(id: string, user: AuthUser) {
+    async get(id: string, user: AuthUser): Promise<FolderDetailResponseDto> {
         const folder = await this.readable(id, user);
         const [[latest]] = await this.submissions.findVersionPage(id, {
             skip: 0,
@@ -111,10 +106,7 @@ export class FolderService {
         );
         if (result === 'GONE') throw folderNotFound();
         if (result === 'HAS_VERSIONS') {
-            throw conflict(
-                'FOLDER_HAS_VERSIONS',
-                'Folder yang sudah memiliki versi tidak dapat dihapus oleh mahasiswa',
-            );
+            throw apiError('FOLDER_HAS_VERSIONS');
         }
     }
 
@@ -142,10 +134,7 @@ export class FolderService {
     private async writable(id: string, user: AuthUser) {
         const folder = await this.readable(id, user);
         if (user.role === 'student' && folder.createdBy !== user.id) {
-            throw forbidden(
-                'NOT_FOLDER_CREATOR',
-                'Hanya pembuat folder yang dapat melakukan aksi ini',
-            );
+            throw apiError('NOT_FOLDER_CREATOR');
         }
         return folder;
     }
@@ -158,42 +147,27 @@ export class FolderService {
     ) {
         if (!isIndividual(project.type)) {
             if (studentId) {
-                throw badRequest(
-                    'STUDENT_NOT_ALLOWED',
-                    'Folder project shared tidak dimiliki satu mahasiswa',
-                );
+                throw apiError('STUDENT_NOT_ALLOWED');
             }
             return null;
         }
         if (user.role === 'student') return user.id;
         if (!studentId) {
-            throw badRequest(
-                'STUDENT_REQUIRED',
-                'studentId wajib diisi untuk project individual',
-            );
+            throw apiError('STUDENT_REQUIRED');
         }
         if (!(await this.access.isMember(project.id, studentId))) {
-            throw badRequest(
-                'STUDENT_NOT_MEMBER',
-                'Mahasiswa bukan anggota project ini',
-            );
+            throw apiError('STUDENT_NOT_MEMBER');
         }
         return studentId;
     }
 
     private assertDeadline(value: string | null | undefined, now: Date) {
         if (value && new Date(value) <= now) {
-            throw badRequest(
-                'DEADLINE_IN_PAST',
-                'Deadline harus di masa depan',
-            );
+            throw apiError('DEADLINE_IN_PAST');
         }
     }
 
     private lecturerOnly() {
-        return forbidden(
-            'LECTURER_ONLY',
-            'Hanya dosen yang dapat menentukan pemilik track dan deadline',
-        );
+        return apiError('LECTURER_ONLY');
     }
 }

@@ -1,10 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
-import {
-    badRequest,
-    conflict,
-    notFound,
-} from '../../shared/http/http-exception.filter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { ProjectAccessService } from '../project/project-access.service';
 import { isIndividual } from '../project/project-type-rules';
@@ -23,6 +18,8 @@ import {
     isNewerFix,
     reviewedStatus,
 } from './revision-state';
+import { apiError } from '../../shared/http/errors';
+import type { RevisionItemContextResponseDto } from './dto/feedback-response.dto';
 
 // flattens where the item came from
 const toItemView = ({
@@ -30,16 +27,15 @@ const toItemView = ({
         version: { folder, ...version },
     },
     ...item
-}: ItemContextRow) => ({ ...item, version, folder });
+}: ItemContextRow): RevisionItemContextResponseDto => ({
+    ...item,
+    version,
+    folder,
+});
 
-const itemNotFound = () =>
-    notFound('REVISION_ITEM_NOT_FOUND', 'Item revisi tidak ditemukan');
+const itemNotFound = () => apiError('REVISION_ITEM_NOT_FOUND');
 
-const invalidTransition = () =>
-    conflict(
-        'INVALID_REVISION_TRANSITION',
-        'Status item revisi tidak memungkinkan aksi ini',
-    );
+const invalidTransition = () => apiError('INVALID_REVISION_TRANSITION');
 
 @Injectable()
 export class RevisionItemService {
@@ -71,16 +67,10 @@ export class RevisionItemService {
             dto.versionId,
         );
         if (!fix) {
-            throw badRequest(
-                'VERSION_NOT_IN_FOLDER',
-                'Versi perbaikan harus berasal dari folder yang sama',
-            );
+            throw apiError('VERSION_NOT_IN_FOLDER');
         }
         if (!isNewerFix(item, version.versionNumber, fix.versionNumber)) {
-            throw badRequest(
-                'VERSION_NOT_NEWER',
-                'Versi perbaikan harus lebih baru dari versi feedback dan perbaikan sebelumnya',
-            );
+            throw apiError('VERSION_NOT_NEWER');
         }
         return this.written(
             await this.feedbacks.address(item, fix.id, dto.note || null),

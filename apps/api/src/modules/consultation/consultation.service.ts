@@ -4,12 +4,6 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
 import { toCancelledEvent } from '../../shared/consultation/cancellation';
 import { CONSULTATION_CANCELLED } from '../../shared/consultation/consultation-cancelled.event';
-import {
-    badRequest,
-    conflict,
-    forbidden,
-    notFound,
-} from '../../shared/http/http-exception.filter';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { formatDateOnly } from '../../shared/time/time';
 import { ProjectAccessService } from '../project/project-access.service';
@@ -29,7 +23,6 @@ import {
     rejectError,
     rescheduleError,
     type StateError,
-    type TimeError,
     timeError,
     turnOf,
     viewStatus,
@@ -52,13 +45,15 @@ import { ProposeTimeDto } from './dto/propose-time.dto';
 import { RejectConsultationDto } from './dto/reject-consultation.dto';
 import { RescheduleConsultationDto } from './dto/reschedule-consultation.dto';
 import { ScheduleConsultationDto } from './dto/schedule-consultation.dto';
+import { apiError } from '../../shared/http/errors';
+import type { ConsultationResponseDto } from './dto/consultation-response.dto';
 
 const SHARED_TYPES = PROJECT_TYPES.filter((t) => !isIndividual(t));
 const trackModeOf = (c: ConsultationRow) =>
     PROJECT_TYPE_RULES[c.project.type].trackMode;
 
 // change raw database response to a response form that can be send to client
-const toView = (c: ConsultationRow, now: Date) => ({
+const toView = (c: ConsultationRow, now: Date): ConsultationResponseDto => ({
     id: c.id,
     status: viewStatus(c, now),
     turn: turnOf(c, now),
@@ -84,23 +79,7 @@ const toView = (c: ConsultationRow, now: Date) => ({
     updatedAt: c.updatedAt,
 });
 
-const MESSAGES: Record<StateError | TimeError, string> = {
-    INVALID_TRANSITION: 'Status bimbingan tidak mengizinkan aksi ini',
-    CONSULTATION_EXPIRED: 'Pengajuan bimbingan sudah kedaluwarsa',
-    NOT_YOUR_TURN: 'Bukan giliran Anda dalam negosiasi jam',
-    NO_PROPOSAL: 'Belum ada usulan jam untuk diterima',
-    PROPOSAL_EXPIRED: 'Usulan jam sudah lewat; usulkan jam baru',
-    CONSULTATION_STARTED: 'Bimbingan sudah dimulai',
-    CONSULTATION_NOT_STARTED: 'Bimbingan belum dimulai',
-    INVALID_TIME_RANGE:
-        'Durasi bimbingan 15 menit–4 jam, mulai dan selesai di tanggal yang sama',
-    OUTSIDE_BOOKING_WINDOW:
-        'Waktu bimbingan minimal 1 jam dari sekarang dan maksimal 60 hari ke depan',
-};
-
-const stateConflict = (code: StateError) => conflict(code, MESSAGES[code]);
-const consultationNotFound = () =>
-    notFound('CONSULTATION_NOT_FOUND', 'Bimbingan tidak ditemukan');
+const consultationNotFound = () => apiError('CONSULTATION_NOT_FOUND');
 
 @Injectable()
 export class ConsultationService {
@@ -213,10 +192,7 @@ export class ConsultationService {
             now,
         );
         if (result === 'PENDING_EXISTS') {
-            throw conflict(
-                'CONSULTATION_PENDING_EXISTS',
-                'Masih ada pengajuan bimbingan yang menunggu di project ini',
-            );
+            throw apiError('CONSULTATION_PENDING_EXISTS');
         }
         if (result === 'DATE_BLACKLISTED') throw this.dateNotAvailable();
         return this.done(this.written(result), 'requested', 'student', now, {
@@ -282,10 +258,7 @@ export class ConsultationService {
         const now = new Date();
         await this.access.getOwnedProject(projectId, user.id);
         if (!(await this.access.isMember(projectId, dto.studentId))) {
-            throw badRequest(
-                'STUDENT_NOT_MEMBER',
-                'Mahasiswa bukan anggota project ini',
-            );
+            throw apiError('STUDENT_NOT_MEMBER');
         }
         const time = this.time(dto.startAt, dto.endAt, now);
         const result = await this.consultations.schedule({
@@ -327,7 +300,7 @@ export class ConsultationService {
         this.assertState(cancelError(c, now));
         const reason = dto.reason || null;
         const row = await this.consultations.cancel(id, reason, now);
-        if (!row) throw stateConflict('INVALID_TRANSITION');
+        if (!row) throw apiError('INVALID_TRANSITION');
         this.events.emit(
             CONSULTATION_CANCELLED,
             toCancelledEvent(row, reason, user.role),
@@ -366,10 +339,7 @@ export class ConsultationService {
     private async writable(id: string, user: AuthUser) {
         const c = await this.readable(id, user);
         if (user.role === 'student' && c.studentId !== user.id) {
-            throw forbidden(
-                'NOT_CONSULTATION_OWNER',
-                'Hanya mahasiswa pengaju yang dapat melakukan aksi ini',
-            );
+            throw apiError('NOT_CONSULTATION_OWNER');
         }
         return c;
     }
@@ -408,30 +378,24 @@ export class ConsultationService {
         const startAt = new Date(start);
         const endAt = new Date(end);
         const error = timeError(startAt, endAt, now);
-        if (error) throw badRequest(error, MESSAGES[error]);
+        if (error) throw apiError(error);
         return { startAt, endAt };
     }
 
     private assertState(error: StateError | null) {
-        if (error) throw stateConflict(error);
+        if (error) throw apiError(error);
     }
 
     // maps a repository write result to the row or an HTTP error
     private written(result: WriteResult): ConsultationRow {
         if (result === 'DATE_BLACKLISTED') {
-            throw badRequest(
-                'DATE_BLACKLISTED',
-                'Dosen berhalangan pada tanggal tersebut',
-            );
+            throw apiError('DATE_BLACKLISTED');
         }
         if (result === 'OVERLAP') {
-            throw conflict(
-                'CONSULTATION_OVERLAP',
-                'Jadwal bentrok dengan bimbingan lain',
-            );
+            throw apiError('CONSULTATION_OVERLAP');
         }
         if (result === 'STALE' || result === 'PENDING_EXISTS') {
-            throw stateConflict('INVALID_TRANSITION');
+            throw apiError('INVALID_TRANSITION');
         }
         return result;
     }
@@ -465,23 +429,14 @@ export class ConsultationService {
     }
 
     private dateNotAvailable() {
-        return badRequest(
-            'DATE_NOT_AVAILABLE',
-            'Tanggal tidak tersedia (lampau, lebih dari 60 hari, atau dosen berhalangan)',
-        );
+        return apiError('DATE_NOT_AVAILABLE');
     }
 
     private lecturerOnly() {
-        return badRequest(
-            'FIELD_NOT_ALLOWED',
-            'Lokasi dan mode hanya dapat ditentukan dosen',
-        );
+        return apiError('FIELD_NOT_ALLOWED');
     }
 
     private locationRequired() {
-        return badRequest(
-            'LOCATION_REQUIRED',
-            'Lokasi bimbingan wajib diisi dosen',
-        );
+        return apiError('LOCATION_REQUIRED');
     }
 }

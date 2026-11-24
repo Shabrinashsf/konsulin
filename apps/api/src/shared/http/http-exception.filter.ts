@@ -1,13 +1,9 @@
 import {
     ArgumentsHost,
-    BadRequestException,
     Catch,
-    ConflictException,
     ExceptionFilter,
-    ForbiddenException,
     HttpException,
     Logger,
-    NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { STATUS_CODES } from 'node:http';
@@ -17,16 +13,6 @@ interface ErrorBody {
     code?: unknown;
     details?: unknown;
 }
-
-// HTTP errors with a machine-readable code
-export const badRequest = (code: string, message: string) =>
-    new BadRequestException({ message, code });
-export const forbidden = (code: string, message: string) =>
-    new ForbiddenException({ message, code });
-export const notFound = (code: string, message: string) =>
-    new NotFoundException({ message, code });
-export const conflict = (code: string, message: string) =>
-    new ConflictException({ message, code });
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {

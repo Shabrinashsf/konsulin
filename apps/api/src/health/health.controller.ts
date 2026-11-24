@@ -5,11 +5,17 @@ import {
     toJakartaDate,
     toJakartaTime,
 } from '../shared/time/time';
+import { ApiTags } from '@nestjs/swagger';
+import { ApiDataResponse } from '../shared/http/api-docs';
+import { HealthResponseDto } from './health-response.dto';
 
+@ApiTags('Health')
 @Public()
 @Controller('health')
 export class HealthController {
+    // check with the server time in UTC and WIB
     @Get()
+    @ApiDataResponse(HealthResponseDto)
     check() {
         const now = new Date();
         return {

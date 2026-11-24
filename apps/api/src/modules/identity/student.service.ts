@@ -5,9 +5,13 @@ import { PROJECT_TYPE_RULES } from '../project/project-type-rules';
 import { type Degree, withDegree } from './degree';
 import { StudentQueryDto } from './dto/student-query.dto';
 import { type StudentRow, UserRepository } from './user.repository';
+import type { StudentResponseDto } from './dto/identity-response.dto';
 
 // change raw database response to a response form that can be send to client
-const toStudentView = ({ studyProgram, ...s }: StudentRow) => ({
+const toStudentView = ({
+    studyProgram,
+    ...s
+}: StudentRow): StudentResponseDto => ({
     ...s,
     studyProgram: withDegree(studyProgram),
 });

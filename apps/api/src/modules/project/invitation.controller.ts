@@ -19,9 +19,16 @@ import { InvitationService } from './invitation.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { InvitationQueryDto } from './dto/invitation-query.dto';
 import { RespondInvitationDto } from './dto/respond-invitation.dto';
+import {
+    ApiDataResponse,
+    ApiErrors,
+    ApiPageResponse,
+} from '../../shared/http/api-docs';
+import { InvitationResponseDto } from './dto/project-response.dto';
 
 @ApiTags('Invitations')
 @ApiBearerAuth()
+@ApiErrors('UNAUTHORIZED')
 @Controller()
 export class InvitationController {
     constructor(private readonly invitations: InvitationService) {}
@@ -29,6 +36,8 @@ export class InvitationController {
     // -- GET /projects/:projectId/invitations -> list project invitation
     @Roles('lecturer')
     @Get('projects/:projectId/invitations')
+    @ApiPageResponse(InvitationResponseDto)
+    @ApiErrors('VALIDATION', 'ROLE', 'PROJECT_NOT_FOUND')
     listForProject(
         @CurrentUser() user: AuthUser,
         @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -40,6 +49,16 @@ export class InvitationController {
     // -- POST /projects/:projectId/invitations -> send invitation
     @Roles('lecturer')
     @Post('projects/:projectId/invitations')
+    @ApiDataResponse(InvitationResponseDto, 201)
+    @ApiErrors(
+        'VALIDATION',
+        'ROLE',
+        'PROJECT_NOT_FOUND',
+        'STUDENT_NOT_FOUND',
+        'DEGREE_MISMATCH',
+        'ALREADY_MEMBER',
+        'INVITATION_ALREADY_PENDING',
+    )
     create(
         @CurrentUser() user: AuthUser,
         @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -51,6 +70,15 @@ export class InvitationController {
     // -- DELETE /projects/:projectId/Invitations/:invitationId -> revoke pending invitation
     @Roles('lecturer')
     @Delete('projects/:projectId/invitations/:invitationId')
+    @ApiDataResponse(InvitationResponseDto)
+    @ApiErrors(
+        'VALIDATION',
+        'ROLE',
+        'PROJECT_NOT_FOUND',
+        'INVITATION_NOT_FOUND',
+        'INVITATION_EXPIRED',
+        'INVITATION_NOT_PENDING',
+    )
     revoke(
         @CurrentUser() user: AuthUser,
         @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -62,6 +90,8 @@ export class InvitationController {
     // -- GET /invitations/me -> my invitations
     @Roles('student')
     @Get('invitations/me')
+    @ApiPageResponse(InvitationResponseDto)
+    @ApiErrors('VALIDATION', 'ROLE')
     listMine(@CurrentUser() user: AuthUser, @Query() q: InvitationQueryDto) {
         return this.invitations.listMine(user.id, q);
     }
@@ -70,6 +100,14 @@ export class InvitationController {
     @Roles('student')
     @Post('invitations/:invitationId/respond')
     @HttpCode(200)
+    @ApiDataResponse(InvitationResponseDto)
+    @ApiErrors(
+        'VALIDATION',
+        'ROLE',
+        'INVITATION_NOT_FOUND',
+        'INVITATION_EXPIRED',
+        'INVITATION_NOT_PENDING',
+    )
     respond(
         @CurrentUser() user: AuthUser,
         @Param('invitationId', ParseUUIDPipe) invitationId: string,

@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { paginate } from '../../shared/http/pagination-query.dto';
 import { jakartaDateTime } from '../../shared/time/time';
-import { withDegree } from '../identity/degree';
+import { degreeOf } from '../identity/degree';
 import { ProjectAccessService } from '../project/project-access.service';
 import { MonitoringQueryDto } from './dto/monitoring-query.dto';
 import {
     MonitoringRepository,
     type MonitoringRow,
 } from './monitoring.repository';
+import type { MonitoredStudentResponseDto } from './dto/monitoring-response.dto';
 
 // change raw database rows to the response form sent to the client
 const toView = ({
@@ -18,15 +19,23 @@ const toView = ({
     nearestProjectId,
     nearestDeadlineAt,
     ...r
-}: MonitoringRow) => ({
+}: MonitoringRow): MonitoredStudentResponseDto => ({
     ...r,
-    studyProgram: withDegree({ id: studyProgramId, name: studyProgramName }),
-    nearestDeadline: nearestFolderId && {
-        folderId: nearestFolderId,
-        title: nearestTitle,
-        projectId: nearestProjectId,
-        deadlineAt: nearestDeadlineAt,
+    studyProgram: {
+        id: studyProgramId,
+        name: studyProgramName,
+        degree: degreeOf(studyProgramName),
     },
+    // one LEFT JOIN row: the four columns are null together
+    nearestDeadline:
+        nearestFolderId === null
+            ? null
+            : {
+                  folderId: nearestFolderId,
+                  title: nearestTitle!,
+                  projectId: nearestProjectId!,
+                  deadlineAt: nearestDeadlineAt!,
+              },
 });
 
 @Injectable()

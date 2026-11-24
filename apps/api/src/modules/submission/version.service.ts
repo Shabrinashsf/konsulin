@@ -3,7 +3,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import type { AuthUser } from '../../shared/auth/auth.decorators';
-import { badRequest, notFound } from '../../shared/http/http-exception.filter';
 import {
     paginate,
     PaginationQueryDto,
@@ -18,6 +17,7 @@ import {
 } from './submission-events';
 import { SubmissionRepository } from './submission.repository';
 import { toVersionView } from './views';
+import { apiError } from '../../shared/http/errors';
 
 // submission_versions.original_name
 const MAX_NAME = 255;
@@ -66,18 +66,18 @@ export class VersionService {
         dto: UploadVersionDto,
     ) {
         const folder = await this.folders.readable(folderId, user);
-        if (!file) throw badRequest('FILE_REQUIRED', 'File wajib diunggah');
+        if (!file) throw apiError('FILE_REQUIRED');
         const type = await detectFileType(file.path, file.originalname);
         if (!type) {
-            throw badRequest(
-                'INVALID_FILE_TYPE',
-                'File harus PDF, DOCX, atau ZIP dan isinya sesuai ekstensi',
-            );
+            throw apiError('INVALID_FILE_TYPE');
         }
 
         const driver = this.storage.driver;
         const key = `projects/${folder.projectId}/folders/${folder.id}/${randomUUID()}${type.ext}`;
-        await this.storage.put(key, file.path);
+        await this.storage.put(key, file.path, {
+            contentType: type.mime,
+            size: file.size,
+        });
         const removeStored = () => this.storage.delete(driver, key);
         const row = await this.submissions
             .createVersion({
@@ -119,7 +119,7 @@ export class VersionService {
     async download(id: string, user: AuthUser) {
         const v = await this.submissions.findVersion(id);
         if (!v || !(await this.folders.canRead(v.folder, user))) {
-            throw notFound('VERSION_NOT_FOUND', 'Versi tidak ditemukan');
+            throw apiError('VERSION_NOT_FOUND');
         }
         const stream = await this.storage.open(v.storageDriver, v.storedKey);
         return new StreamableFile(stream, {

@@ -1,8 +1,4 @@
-import {
-    ConflictException,
-    Injectable,
-    UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
@@ -15,10 +11,11 @@ import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenRepository } from './refresh-token.repository';
 import { StudyProgramRepository } from './study-program.repository';
 import { type ProfileRow, UserRepository } from './user.repository';
-import { badRequest } from '../../shared/http/http-exception.filter';
+import { apiError } from '../../shared/http/errors';
+import type { ProfileResponseDto } from './dto/identity-response.dto';
 
 // change raw database response to a response form that can be send to client
-const toProfile = ({ studyProgram, ...u }: ProfileRow) => ({
+const toProfile = ({ studyProgram, ...u }: ProfileRow): ProfileResponseDto => ({
     ...u,
     studyProgram: withDegree(studyProgram),
 });
@@ -43,18 +40,13 @@ export class AuthService {
 
     async register(dto: RegisterDto) {
         if (!(await this.studyPrograms.exists(dto.studyProgramId))) {
-            throw badRequest(
-                'STUDY_PROGRAM_NOT_FOUND',
-                'Program studi tidak ditemukan',
-            );
+            throw apiError('STUDY_PROGRAM_NOT_FOUND');
         }
 
         const taken = await this.users.findByEmailOrNrp(dto.email, dto.nrp);
         if (taken) {
-            throw new ConflictException(
-                taken.email === dto.email
-                    ? { message: 'Email sudah terdaftar', code: 'EMAIL_TAKEN' }
-                    : { message: 'NRP sudah terdaftar', code: 'NRP_TAKEN' },
+            throw apiError(
+                taken.email === dto.email ? 'EMAIL_TAKEN' : 'NRP_TAKEN',
             );
         }
 

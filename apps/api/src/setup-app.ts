@@ -28,13 +28,23 @@ export function setupApp(app: INestApplication) {
 }
 
 export function setupSwagger(app: INestApplication) {
-    const doc = SwaggerModule.createDocument(
+    SwaggerModule.setup('api/docs', app, createApiDocument(app), {
+        useGlobalPrefix: false,
+    });
+}
+
+export function createApiDocument(app: INestApplication) {
+    return SwaggerModule.createDocument(
         app,
         new DocumentBuilder()
             .setTitle('Konsulin API')
             .setVersion('1.0')
             .addBearerAuth()
+            .addCookieAuth(
+                'refresh_token',
+                { type: 'apiKey', in: 'cookie' },
+                'refresh_token',
+            )
             .build(),
     );
-    SwaggerModule.setup('api/docs', app, doc, { useGlobalPrefix: false });
 }
