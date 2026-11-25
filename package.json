@@ -6,6 +6,9 @@
         "test:api": "pnpm --filter @konsulin/api test",
         "test:api:e2e": "pnpm --filter @konsulin/api test:e2e",
         "test:api:cov": "pnpm --filter @konsulin/api test:cov",
-        "lint:api": "pnpm --filter @konsulin/api lint"
+        "lint:api": "pnpm --filter @konsulin/api lint",
+        "dev:web": "pnpm --filter @konsulin/web dev",
+        "build:web": "pnpm --filter @konsulin/web build",
+        "test:web": "pnpm --filter @konsulin/web test"
     }
 }
