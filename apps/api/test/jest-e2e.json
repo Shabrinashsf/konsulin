@@ -1,25 +1,13 @@
 {
-    "moduleFileExtensions": [
-        "js",
-        "json",
-        "ts"
-    ],
+    "moduleFileExtensions": ["js", "json", "ts"],
     "rootDir": "..",
     "testEnvironment": "node",
     "testRegex": "test/.*\\.e2e-spec\\.ts$",
     "transform": {
         "^.+\\.(t|j)s$": [
             "ts-jest",
-            {
-                "astTransformers": {
-                    "before": [
-                        "<rootDir>/test/swagger-plugin.js"
-                    ]
-                }
-            }
+            { "astTransformers": { "before": ["<rootDir>/test/swagger-plugin.js"] } }
         ]
     },
-    "setupFiles": [
-        "<rootDir>/test/setup-env.ts"
-    ]
+    "setupFiles": ["<rootDir>/test/setup-env.ts"]
 }

@@ -5,7 +5,7 @@ import type { Env } from '../../config/env.schema';
 import { ProjectModule } from '../project/project.module';
 import { FolderController } from './folder.controller';
 import { FolderService } from './folder.service';
-import { r2ClientProvider, StorageService } from './storage.service';
+import { StorageService } from './storage.service';
 import { SubmissionRepository } from './submission.repository';
 import { VersionController } from './version.controller';
 import { VersionService } from './version.service';
@@ -36,7 +36,6 @@ import { VersionService } from './version.service';
         FolderService,
         VersionService,
         StorageService,
-        r2ClientProvider,
     ],
     // folder access is reused by the feedback module
     exports: [FolderService],

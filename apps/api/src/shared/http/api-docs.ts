@@ -14,7 +14,6 @@ const ref = (model: Type) => ({ $ref: getSchemaPath(model) });
 export function ApiDataResponse(
     model: Type | [Type] | null,
     status: 200 | 201 = 200,
-    description?: string,
 ) {
     const one = Array.isArray(model) ? model[0] : model;
     const data = !one
@@ -26,7 +25,6 @@ export function ApiDataResponse(
         ...(one ? [ApiExtraModels(one)] : []),
         ApiResponse({
             status,
-            description,
             schema: {
                 type: 'object',
                 required: ['data'],
@@ -37,12 +35,11 @@ export function ApiDataResponse(
 }
 
 /** `{ data: Model[], meta: PageMeta }` */
-export function ApiPageResponse(model: Type, description?: string) {
+export function ApiPageResponse(model: Type) {
     return applyDecorators(
         ApiExtraModels(model, PageMetaDto),
         ApiResponse({
             status: 200,
-            description,
             schema: {
                 type: 'object',
                 required: ['data', 'meta'],

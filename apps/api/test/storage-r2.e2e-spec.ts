@@ -2,7 +2,7 @@ import {
     DeleteObjectCommand,
     GetObjectCommand,
     PutObjectCommand,
-    type S3Client,
+    S3Client,
 } from '@aws-sdk/client-s3';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -35,13 +35,19 @@ import {
 
 // switching STORAGE_DRIVER to r2 needs no code change, and versions
 // stored with the old driver stay downloadable.
-const R2_ENV = { STORAGE_DRIVER: 'r2', R2_BUCKET: 'konsulin-test' };
+const R2_ENV = {
+    STORAGE_DRIVER: 'r2',
+    R2_ACCOUNT_ID: 'acc',
+    R2_ACCESS_KEY_ID: 'id',
+    R2_SECRET_ACCESS_KEY: 'secret',
+    R2_BUCKET: 'konsulin-test',
+};
 
 const UPLOADS = process.env.UPLOAD_DIR!;
 const TMP = process.env.UPLOAD_TMP_DIR!;
 const PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
 
-// an in-memory bucket in place of Cloudflare R2
+// an in-memory bucket in place of Cloudflare R2 (S3Client.send)
 const bucket = new Map<string, Buffer>();
 const r2 = {
     send: jest.fn(async (cmd: unknown) => {
@@ -90,7 +96,10 @@ describe('R2 storage driver (e2e)', () => {
 
     beforeAll(async () => {
         // StorageService as the app builds it with STORAGE_DRIVER=r2 and the
-        // R2 variables set (that wiring is unit-tested in storage.service.spec)
+        // R2 variables set; the client sends to the in-memory bucket
+        jest.spyOn(S3Client.prototype, 'send').mockImplementation(
+            r2.send as never,
+        );
         const moduleRef = await Test.createTestingModule({
             imports: [AppModule],
         })
@@ -98,15 +107,12 @@ describe('R2 storage driver (e2e)', () => {
             .useFactory({
                 inject: [ConfigService],
                 factory: (config: ConfigService<Env, true>) =>
-                    new StorageService(
-                        {
-                            get: (k: keyof Env) =>
-                                k in R2_ENV
-                                    ? R2_ENV[k as keyof typeof R2_ENV]
-                                    : config.get(k, { infer: true }),
-                        } as ConfigService<Env, true>,
-                        r2 as unknown as S3Client,
-                    ),
+                    new StorageService({
+                        get: (k: keyof Env) =>
+                            k in R2_ENV
+                                ? R2_ENV[k as keyof typeof R2_ENV]
+                                : config.get(k, { infer: true }),
+                    } as ConfigService<Env, true>),
             })
             .compile();
         app = moduleRef.createNestApplication();

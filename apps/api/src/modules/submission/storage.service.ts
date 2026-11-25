@@ -4,7 +4,7 @@ import {
     PutObjectCommand,
     S3Client,
 } from '@aws-sdk/client-s3';
-import { Inject, Injectable, type Provider } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createReadStream } from 'node:fs';
 import { mkdir, open, rename, rm } from 'node:fs/promises';
@@ -14,28 +14,6 @@ import type { Env } from '../../config/env.schema';
 import type { StorageDriver } from '../../generated/prisma/client';
 import { apiError } from '../../shared/http/errors';
 
-// Cloudflare R2 speaks the S3 API; null when the R2 credentials are not set
-export const R2_CLIENT = Symbol('R2_CLIENT');
-
-export const r2ClientProvider: Provider = {
-    provide: R2_CLIENT,
-    inject: [ConfigService],
-    useFactory: (config: ConfigService<Env, true>) => {
-        const get = <K extends keyof Env>(k: K) =>
-            config.get(k, { infer: true });
-        const account = get('R2_ACCOUNT_ID');
-        const accessKeyId = get('R2_ACCESS_KEY_ID');
-        const secretAccessKey = get('R2_SECRET_ACCESS_KEY');
-        if (!account || !accessKeyId || !secretAccessKey || !get('R2_BUCKET'))
-            return null;
-        return new S3Client({
-            region: 'auto',
-            endpoint: `https://${account}.r2.cloudflarestorage.com`,
-            credentials: { accessKeyId, secretAccessKey },
-        });
-    },
-};
-
 // New uploads go to STORAGE_DRIVER; reads and deletes use the driver recorded
 // on each version, so switching the driver never strands older files.
 @Injectable()
@@ -43,14 +21,25 @@ export class StorageService {
     readonly driver: StorageDriver;
     private readonly root: string;
     private readonly bucket?: string;
+    // Cloudflare R2 speaks the S3 API; null when the R2 credentials are not set
+    private readonly r2Client: S3Client | null = null;
 
-    constructor(
-        config: ConfigService<Env, true>,
-        @Inject(R2_CLIENT) private readonly r2Client: S3Client | null,
-    ) {
-        this.driver = config.get('STORAGE_DRIVER', { infer: true });
-        this.root = resolve(config.get('UPLOAD_DIR', { infer: true }));
-        this.bucket = config.get('R2_BUCKET', { infer: true });
+    constructor(config: ConfigService<Env, true>) {
+        const get = <K extends keyof Env>(k: K) =>
+            config.get(k, { infer: true });
+        this.driver = get('STORAGE_DRIVER');
+        this.root = resolve(get('UPLOAD_DIR'));
+        this.bucket = get('R2_BUCKET');
+        const account = get('R2_ACCOUNT_ID');
+        const accessKeyId = get('R2_ACCESS_KEY_ID');
+        const secretAccessKey = get('R2_SECRET_ACCESS_KEY');
+        if (account && accessKeyId && secretAccessKey && this.bucket) {
+            this.r2Client = new S3Client({
+                region: 'auto',
+                endpoint: `https://${account}.r2.cloudflarestorage.com`,
+                credentials: { accessKeyId, secretAccessKey },
+            });
+        }
     }
 
     // stores the multer tmp file under `key` with the active driver

@@ -134,12 +134,5 @@ export function apiError(
     extra: { message?: string; details?: unknown } = {},
 ) {
     const [status, message] = ERRORS[code];
-    return new HttpException(
-        {
-            message: extra.message ?? message,
-            code,
-            ...(extra.details === undefined ? {} : { details: extra.details }),
-        },
-        status,
-    );
+    return new HttpException({ message, code, ...extra }, status);
 }
