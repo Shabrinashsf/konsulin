@@ -268,7 +268,7 @@ export const feedbackMail = (
         content: string;
         revisionItems: string[];
         version: { id: string; versionNumber: number };
-        folder: { title: string };
+        folder: { id: string; title: string };
         project: { title: string };
         lecturer: { name: string };
     },
@@ -297,7 +297,7 @@ export const feedbackMail = (
         ],
         button: {
             label: 'Lihat feedback',
-            url: `${web}/versions/${e.version.id}`,
+            url: `${web}/folders/${e.folder.id}?versi=${e.version.id}`,
         },
     }),
 });

@@ -475,7 +475,12 @@ describe('Notifications (e2e)', () => {
             );
             expect(recipients(mails)).toEqual([email(p.studentS1)]);
             expect(mails[0].html).toContain('<li>Tambah &lt;data&gt;</li>');
-            expect(mails[0].html).toContain(`${WEB}/versions/`);
+            // the folder page, opened on the version the feedback is about
+            expect(mails[0].html).toMatch(
+                new RegExp(
+                    `${WEB}/folders/[0-9a-f-]{36}\\?versi=[0-9a-f-]{36}`,
+                ),
+            );
         });
 
         it('shared: every active member', async () => {
