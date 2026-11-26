@@ -119,12 +119,4 @@ export class BlackoutDateService {
         );
         return { deleted };
     }
-
-    async remove(lecturerId: string, id: string) {
-        const row = await this.blackouts.delete(id, lecturerId);
-        if (!row) {
-            throw apiError('BLACKOUT_NOT_FOUND');
-        }
-        return toBlackoutView(row);
-    }
 }

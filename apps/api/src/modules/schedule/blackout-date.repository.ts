@@ -39,9 +39,6 @@ export type CreateRangeResult =
     | { conflict: CancelledRow[] }
     | { created: string[]; skipped: string[]; cancelled: CancelledRow[] };
 
-const isPrismaError = (e: unknown, code: string) =>
-    e instanceof Prisma.PrismaClientKnownRequestError && e.code === code;
-
 @Injectable()
 export class BlackoutDateRepository {
     constructor(private readonly prisma: PrismaService) {}
@@ -134,18 +131,5 @@ export class BlackoutDateRepository {
             await tx.blackoutDate.deleteMany({ where });
             return rows.map((r) => formatDateOnly(r.date));
         });
-    }
-
-    // null when it does not exist or belongs to another lecturer
-    async delete(id: string, lecturerId: string) {
-        try {
-            return await this.prisma.blackoutDate.delete({
-                where: { id, lecturerId },
-                select: BLACKOUT_SELECT,
-            });
-        } catch (e) {
-            if (isPrismaError(e, 'P2025')) return null;
-            throw e;
-        }
     }
 }

@@ -40,7 +40,6 @@ type CreateResult = {
 };
 type DayStatus = { date: string; status: 'available' | 'unavailable' };
 
-const MISSING_ID = '00000000-0000-4000-8000-000000000000';
 const GENERIC_REASON = 'Dosen berhalangan pada tanggal tersebut';
 
 describe('Schedule (e2e)', () => {
@@ -561,41 +560,6 @@ describe('Schedule (e2e)', () => {
                 `from=${day(1)}&to=${day(2)}`,
                 p.tokens.s1,
             ).expect(403);
-        });
-    });
-
-    describe('DELETE /me/blackout-dates/:id', () => {
-        const idOf = async () =>
-            (await prisma.blackoutDate.findFirstOrThrow()).id;
-
-        it('pemilik → 200 data yang dihapus; hapus ulang → 404', async () => {
-            await blackout(day(3)).expect(201);
-            const url = `/api/v1/me/blackout-dates/${await idOf()}`;
-            const res = await as(p.tokens.owner).delete(url).expect(200);
-            expect(dataOf(res)).toMatchObject({ date: day(3) });
-            const again = await as(p.tokens.owner).delete(url).expect(404);
-            expect(codeOf(again)).toBe('BLACKOUT_NOT_FOUND');
-            await blackout(day(3)).expect(201);
-        });
-
-        it('milik dosen lain → 404 dan tidak terhapus', async () => {
-            await blackout(day(3)).expect(201);
-            await as(p.tokens.other)
-                .delete(`/api/v1/me/blackout-dates/${await idOf()}`)
-                .expect(404);
-            expect(await prisma.blackoutDate.count()).toBe(1);
-        });
-
-        it('id tidak ada → 404; bukan UUID → 400; mahasiswa → 403', async () => {
-            await as(p.tokens.owner)
-                .delete(`/api/v1/me/blackout-dates/${MISSING_ID}`)
-                .expect(404);
-            await as(p.tokens.owner)
-                .delete('/api/v1/me/blackout-dates/abc')
-                .expect(400);
-            await as(p.tokens.s1)
-                .delete(`/api/v1/me/blackout-dates/${MISSING_ID}`)
-                .expect(403);
         });
     });
 

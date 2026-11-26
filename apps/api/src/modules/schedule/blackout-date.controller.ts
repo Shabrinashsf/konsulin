@@ -1,13 +1,4 @@
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseUUIDPipe,
-    Post,
-    Query,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
     type AuthUser,
@@ -74,16 +65,5 @@ export class BlackoutDateController {
         @Query() q: BlackoutRangeQueryDto,
     ) {
         return this.blackouts.removeRange(user.id, q);
-    }
-
-    // -- DELETE /me/blackout-dates/:id -> remove a blacklisted date --
-    @Delete(':id')
-    @ApiDataResponse(BlackoutResponseDto)
-    @ApiErrors('VALIDATION', 'ROLE', 'BLACKOUT_NOT_FOUND')
-    remove(
-        @CurrentUser() user: AuthUser,
-        @Param('id', ParseUUIDPipe) id: string,
-    ) {
-        return this.blackouts.remove(user.id, id);
     }
 }

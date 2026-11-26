@@ -40,7 +40,6 @@ export const ERRORS = {
         409,
         'Rentang ini mengenai bimbingan aktif. Kirim ulang dengan cancelConsultations: true untuk membatalkannya.',
     ],
-    BLACKOUT_NOT_FOUND: [404, 'Tanggal blacklist tidak ditemukan'],
 
     // consultation
     CONSULTATION_NOT_FOUND: [404, 'Bimbingan tidak ditemukan'],
