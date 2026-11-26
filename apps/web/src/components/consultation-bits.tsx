@@ -2,13 +2,13 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Badge, Field, Input, Select } from "./ui";
 import { ConsultationBadge, ModeBadge } from "./status";
+import { DayPicker } from "./day-picker";
 import {
   addDays,
   fmtLongDate,
   fmtRange,
   todayWIB,
   wibDate,
-  wibIso,
   wibTime,
 } from "../lib/time";
 import type { Consultation, Mode, Profile } from "../lib/types";
@@ -89,11 +89,34 @@ export function ConsultationItem({
   );
 }
 
-/** Date + start/end time in WIB → { startAt, endAt } ISO. */
-export function useTimeFields(init?: {
-  startAt: string | null;
-  endAt: string | null;
-}) {
+// Same limits as the API (consultation-state.ts): 15 min–4 h on one WIB date, start 1 h–60 days ahead.
+const iso = (date: string, time: string) => {
+  const d = new Date(`${date}T${time}:00+07:00`);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+};
+export function timeProblem(startAt: string, endAt: string, now = Date.now()) {
+  if (!startAt || !endAt) return "Isi tanggal dan jam bimbingan.";
+  const s = Date.parse(startAt);
+  const minutes = (Date.parse(endAt) - s) / 60_000;
+  if (minutes <= 0) return "Jam selesai harus setelah jam mulai.";
+  if (minutes < 15 || minutes > 240 || wibDate(startAt) !== wibDate(endAt))
+    return "Durasi 15 menit sampai 4 jam, di tanggal yang sama.";
+  if (s < now + 60 * 60_000) return "Jam mulai minimal 1 jam dari sekarang.";
+  if (s > now + 60 * 86_400_000) return "Maksimal 60 hari ke depan.";
+  return null;
+}
+
+/**
+ * Date + start/end time in WIB → { startAt, endAt } ISO. The date comes from the project's
+ * available days (GET /projects/:id/available-days), the same calendar the student sees.
+ */
+export function useTimeFields(
+  projectId: string,
+  init?: {
+    startAt: string | null;
+    endAt: string | null;
+  },
+) {
   const [date, setDate] = useState(
     init?.startAt ? wibDate(init.startAt) : addDays(todayWIB(), 1),
   );
@@ -101,34 +124,41 @@ export function useTimeFields(init?: {
     init?.startAt ? wibTime(init.startAt) : "09:00",
   );
   const [end, setEnd] = useState(init?.endAt ? wibTime(init.endAt) : "10:00");
-  const value = { startAt: wibIso(date, start), endAt: wibIso(date, end) };
+  const value = { startAt: iso(date, start), endAt: iso(date, end) };
+  const error = timeProblem(value.startAt, value.endAt);
   const fields = (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_140px_140px] [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
-      <Field label="Tanggal" required>
-        <Input
-          type="date"
-          min={todayWIB()}
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-      </Field>
-      <Field label="Mulai (WIB)" required>
-        <Input
-          type="time"
-          value={start}
-          onChange={(e) => setStart(e.target.value)}
-        />
-      </Field>
-      <Field label="Selesai (WIB)" required>
-        <Input
-          type="time"
-          value={end}
-          onChange={(e) => setEnd(e.target.value)}
-        />
-      </Field>
+    <div className="grid gap-4 md:grid-cols-2">
+      <div>
+        <DayPicker projectId={projectId} value={date} onChange={setDate} />
+        <p className="mt-2 text-sm">
+          Tanggal dipilih: <b>{date ? fmtLongDate(date) : "-"}</b>
+        </p>
+      </div>
+      <div className="flex flex-col gap-3">
+        <Field label="Mulai (WIB)" required>
+          <Input
+            type="time"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
+        </Field>
+        <Field label="Selesai (WIB)" required>
+          <Input
+            type="time"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+          />
+        </Field>
+        <p
+          className={`text-xs ${error ? "font-medium text-danger" : "text-fg-muted"}`}
+        >
+          {error ??
+            "Durasi 15 menit–4 jam, mulai minimal 1 jam dari sekarang, jam di tanggal yang sama."}
+        </p>
+      </div>
     </div>
   );
-  return { value, fields };
+  return { value, fields, error };
 }
 
 export function LocationFields({

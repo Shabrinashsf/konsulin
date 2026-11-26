@@ -1,8 +1,8 @@
 // US-07/US-08: folder, version history, and feedback + revision checklist per version.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Badge, Button, Card, Empty, Field, Icon, IconButton, Loading, Modal, PageHeader, Textarea, ConfirmDialog } from "../components/ui";
+import { Alert, Badge, Button, Card, Chip, Empty, Field, Icon, IconButton, Loading, Modal, PageHeader, Textarea, ConfirmDialog } from "../components/ui";
 import { DeadlineBadge } from "../components/status";
 import { api, errorMessage } from "../lib/api";
 import { useMe } from "../lib/auth";
@@ -31,6 +31,62 @@ const statsOf = (items: RevisionItemContext[]): Stats => ({
     .length,
 });
 
+/** Fixing an item needs a version newer than the feedback's version and than the last claim (BR-14). */
+const needsNewVersion = (i: RevisionItemContext, latest: Version) =>
+  Math.max(i.version.versionNumber, i.addressedInVersion?.versionNumber ?? 0) >=
+  latest.versionNumber;
+
+/** One sentence about what happens next on this folder, with the one action that moves it forward. */
+function FolderNext({
+  lecturer,
+  canAddress,
+  items,
+  latest,
+}: {
+  lecturer: boolean;
+  canAddress: boolean;
+  items: RevisionItemContext[];
+  latest: Version;
+}) {
+  const st = statsOf(items);
+  if (!st.total) return null;
+  const todo = items.filter((i) => i.status === "open" || i.status === "reopened");
+  let tone: "success" | "warning" | "info" = "info";
+  let title = "";
+  if (st.done === st.total) {
+    tone = "success";
+    title = "Semua revisi sudah terverifikasi";
+  } else if (lecturer) {
+    if (st.review) {
+      tone = "warning";
+      title = `${st.review} revisi menunggu Anda: verifikasi atau minta perbaiki ulang`;
+    } else title = `Menunggu mahasiswa memperbaiki ${st.todo} revisi`;
+  } else if (canAddress && todo.length) {
+    tone = "warning";
+    const stuck = todo.filter((i) => needsNewVersion(i, latest)).length;
+    title = `${st.todo} revisi perlu diperbaiki: ${
+      stuck === 0
+        ? "tandai yang sudah Anda perbaiki"
+        : stuck === todo.length
+          ? "unggah versi baru (tombol di kanan atas), lalu tandai tiap revisi"
+          : "tandai yang sudah diperbaiki, atau unggah versi baru untuk item “Perlu versi baru”"
+    }`;
+  } else if (st.review) title = `${st.review} revisi menunggu dicek dosen`;
+  else title = `${st.done}/${st.total} revisi selesai`;
+  return (
+    <div className="mb-5">
+      <Alert tone={tone}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="min-w-0 flex-1 basis-64 font-medium">{title}</span>
+          <span className="text-[13px] text-fg-muted">
+            {st.done}/{st.total} selesai
+          </span>
+        </div>
+      </Alert>
+    </div>
+  );
+}
+
 export function FolderDetailPage() {
   const { folderId = "" } = useParams();
   const me = useMe();
@@ -45,13 +101,22 @@ export function FolderDetailPage() {
   });
   const versions = useQuery({
     queryKey: ["folders", folderId, "versions"],
-    queryFn: () =>
-      api.list<Version>(`/folders/${folderId}/versions`, { limit: 100 }),
+    queryFn: () => api.listAll<Version>(`/folders/${folderId}/versions`),
     enabled: !!folder.data,
   });
   const revisions = useProjectRevisions(folder.data?.projectId ?? "", {
     folderId,
   });
+  // ?unggah=1 (from "Tandai sudah diperbaiki" when there is no newer version yet) opens the upload dialog
+  useEffect(() => {
+    const f = folder.data;
+    if (!sp.get("unggah") || !f) return;
+    if (me.role !== "lecturer" && (!f.studentId || f.studentId === me.id))
+      setDialog("upload");
+    const n = new URLSearchParams(sp);
+    n.delete("unggah");
+    setSp(n, { replace: true });
+  }, [sp, folder.data, me.role, me.id, setSp]);
   const del = useAction(() => api.del(`/folders/${folderId}`), {
     success: "Folder dihapus",
     onDone: () => nav(`/projects/${folder.data!.projectId}?tab=submission`),
@@ -77,7 +142,6 @@ export function FolderDetailPage() {
   const items = revisions.data?.data ?? [];
   const byVersion = (id: string) =>
     statsOf(items.filter((i) => i.version.id === id));
-  const all = statsOf(items);
 
   return (
     <>
@@ -130,66 +194,13 @@ export function FolderDetailPage() {
         </div>
       )}
 
-      {all.total > 0 && (
-        <Card className="mb-5 flex flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="flex items-center gap-2 font-medium">
-              <Icon name="checklist" className="text-[22px] text-primary" />
-              Revisi folder ini
-            </span>
-            <div className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-secondary-subtle">
-              <div
-                className="h-full rounded-full bg-success"
-                style={{ width: `${(all.done / all.total) * 100}%` }}
-              />
-            </div>
-            <span className="text-[13px] text-fg-muted">
-              {all.done}/{all.total} terverifikasi
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {list
-              .filter((v) => byVersion(v.id).total)
-              .map((v) => {
-                const st = byVersion(v.id);
-                const need = lecturer ? st.review : st.todo;
-                return (
-                  <button
-                    key={v.id}
-                    onClick={() => select(v.id)}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] transition ${v.id === current?.id ? "border-primary bg-primary-soft" : "border-border hover:bg-surface-muted"}`}
-                  >
-                    <b>Feedback v{v.versionNumber}</b>
-                    <span className="text-fg-muted">
-                      {st.done}/{st.total} ✓
-                    </span>
-                    {need > 0 && (
-                      <Badge tone={lecturer ? "info" : "warning"}>
-                        {need}{" "}
-                        {lecturer ? "menunggu review" : "perlu diperbaiki"}
-                      </Badge>
-                    )}
-                  </button>
-                );
-              })}
-          </div>
-          {canUpload && all.todo > 0 && (
-            <p className="text-[13px] text-fg-muted">
-              Cara menyelesaikan: <b className="text-fg">1.</b> perbaiki draft
-              lalu unggah versi baru → <b className="text-fg">2.</b> buka
-              feedback versinya, klik “Tandai sudah diperbaiki” dan pilih versi
-              baru → <b className="text-fg">3.</b> dosen memverifikasi, atau
-              meminta perbaikan ulang bila belum sesuai.
-            </p>
-          )}
-          {lecturer && all.review > 0 && (
-            <p className="text-[13px] text-fg-muted">
-              Item “Menunggu review” sudah ditandai mahasiswa. Buka feedback
-              versinya, cek versi perbaikan, lalu verifikasi atau minta perbaiki
-              ulang.
-            </p>
-          )}
-        </Card>
+      {list.length > 0 && (
+        <FolderNext
+          lecturer={lecturer}
+          canAddress={canUpload}
+          items={items}
+          latest={list[0]}
+        />
       )}
 
       {!list.length ? (
@@ -201,51 +212,29 @@ export function FolderDetailPage() {
           </Empty>
         </Card>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
-          <Card className="flex h-fit flex-col gap-1 p-2">
-            <p className="px-3 pt-2 pb-1 text-xs font-medium text-fg-muted">
-              RIWAYAT VERSI
-            </p>
-            {list.map((v) => {
-              const st = byVersion(v.id);
-              const need = lecturer ? st.review : st.todo;
-              return (
-                <button
-                  key={v.id}
-                  onClick={() => select(v.id)}
-                  className={`flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition ${v.id === current?.id ? "bg-primary-subtle" : "hover:bg-surface-muted"}`}
-                >
-                  <span
-                    className={`flex size-10 shrink-0 items-center justify-center rounded-md font-semibold ${v.id === current?.id ? "bg-primary text-fg-inverse" : "border border-border text-primary"}`}
+        <>
+          {list.length > 1 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-[13px] text-fg-muted">Versi</span>
+              {list.map((v) => {
+                const st = byVersion(v.id);
+                const need = lecturer ? st.review : st.todo;
+                return (
+                  <Chip
+                    key={v.id}
+                    active={v.id === current?.id}
+                    onClick={() => select(v.id)}
                   >
                     v{v.versionNumber}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="truncate font-medium">
-                      {v.originalName}
-                    </span>
-                    <span className="text-xs text-fg-muted">
-                      {fmtDateTime(v.createdAt)} ·{" "}
-                      {v.feedbackCount
-                        ? `${v.feedbackCount} feedback · revisi ${st.done}/${st.total}`
-                        : "belum ada feedback"}
-                    </span>
-                    {(v.late || need > 0) && (
-                      <span className="flex flex-wrap gap-1">
-                        {v.late && <Badge tone="orange">Terlambat</Badge>}
-                        {need > 0 && (
-                          <Badge tone={lecturer ? "info" : "warning"}>
-                            {need}{" "}
-                            {lecturer ? "menunggu review" : "perlu diperbaiki"}
-                          </Badge>
-                        )}
-                      </span>
+                    {v.id === list[0].id ? " (terbaru)" : ""}
+                    {need > 0 && (
+                      <Badge tone={lecturer ? "info" : "warning"}>{need}</Badge>
                     )}
-                  </span>
-                </button>
-              );
-            })}
-          </Card>
+                  </Chip>
+                );
+              })}
+            </div>
+          )}
           {current && (
             <VersionPanel
               key={current.id}
@@ -255,7 +244,7 @@ export function FolderDetailPage() {
               latest={list[0]}
             />
           )}
-        </div>
+        </>
       )}
 
       {dialog === "upload" && (
@@ -284,6 +273,7 @@ export function FolderDetailPage() {
             <Button
               variant="danger"
               loading={del.isPending}
+              disabled={!lecturer && f.versionCount > 0}
               onClick={() => del.mutate()}
             >
               Hapus
@@ -295,11 +285,17 @@ export function FolderDetailPage() {
           Folder <b>{f.title}</b> beserta versi, feedback, dan item revisinya
           akan disembunyikan.
         </p>
-        {!lecturer && (
-          <p className="text-xs text-fg-muted">
-            Mahasiswa hanya dapat menghapus folder yang belum berisi versi.
-          </p>
-        )}
+        {!lecturer &&
+          (f.versionCount > 0 ? (
+            <Alert tone="warning">
+              Folder ini sudah berisi {f.versionCount} versi, jadi hanya dosen
+              yang dapat menghapusnya.
+            </Alert>
+          ) : (
+            <p className="text-xs text-fg-muted">
+              Mahasiswa hanya dapat menghapus folder yang belum berisi versi.
+            </p>
+          ))}
       </Modal>
     </>
   );
@@ -343,11 +339,14 @@ function VersionPanel({
           />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{v.originalName}</p>
+          <p className="flex flex-wrap items-center gap-2 font-medium">
+            {v.originalName}
+            {v.late && <Badge tone="orange">Terlambat</Badge>}
+          </p>
           <p className="text-xs text-fg-muted">
-            Versi {v.versionNumber}
-            {v.id === latest.id ? " (terbaru)" : ""} · {fmtSize(v.sizeBytes)} ·
-            diunggah {v.uploader.name}, {fmtDateTime(v.createdAt)}
+            v{v.versionNumber}
+            {v.id === latest.id ? " (terbaru)" : ""} · {fmtSize(v.sizeBytes)} ·{" "}
+            {v.uploader.name}, {fmtDateTime(v.createdAt)}
           </p>
           {v.note && <p className="mt-1">“{v.note}”</p>}
         </div>
@@ -365,15 +364,6 @@ function VersionPanel({
           </Button>
         )}
       </Card>
-      {canAddress &&
-        items.some((i) => i.status === "open" || i.status === "reopened") &&
-        v.id === latest.id && (
-          <Alert tone="info">
-            Item di bawah ditandai dengan versi yang <b>lebih baru</b> dari v
-            {v.versionNumber}. Unggah versi perbaikan dulu, lalu klik “Tandai
-            sudah diperbaiki”.
-          </Alert>
-        )}
       {feedbacks.isLoading ? (
         <Loading />
       ) : !feedbacks.data?.length ? (
@@ -396,6 +386,8 @@ function VersionPanel({
             versionNumber={v.versionNumber}
             items={items.filter((i) => i.feedbackId === fb.id)}
             canAddress={canAddress}
+            latest={latest}
+            total={feedbacks.data!.length}
           />
         ))
       )}
@@ -412,12 +404,16 @@ function FeedbackCard({
   versionNumber,
   items,
   canAddress,
+  latest,
+  total,
 }: {
   fb: Feedback;
   n: number;
   versionNumber: number;
   items: RevisionItemContext[];
   canAddress: boolean;
+  latest: Version;
+  total: number;
 }) {
   const me = useMe();
   const lecturer = me.role === "lecturer";
@@ -440,7 +436,7 @@ function FeedbackCard({
         <Icon name="rate_review" className="text-[22px] text-primary" />
         <div className="flex-1">
           <p className="font-medium">
-            Feedback #{n} untuk v{versionNumber}
+            Feedback{total > 1 ? ` #${n}` : ""} dosen
           </p>
           <p className="text-xs text-fg-muted">
             {fmtDateTime(fb.createdAt)}
@@ -475,6 +471,7 @@ function FeedbackCard({
           <Textarea
             className="w-full"
             rows={4}
+            maxLength={10000}
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
@@ -486,13 +483,17 @@ function FeedbackCard({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setEditing(false)}
+              onClick={() => {
+                setContent(fb.content);
+                setEditing(false);
+              }}
             >
               Batal
             </Button>
             <Button
               size="sm"
               loading={save.isPending}
+              disabled={!content.trim() || content === fb.content}
               onClick={() => save.mutate()}
             >
               Simpan
@@ -504,22 +505,17 @@ function FeedbackCard({
       )}
       {st.total > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <p className="text-xs font-semibold text-fg-muted">
-              CHECKLIST REVISI
-            </p>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary-subtle">
-              <div
-                className="h-full rounded-full bg-success"
-                style={{ width: `${(st.done / st.total) * 100}%` }}
-              />
-            </div>
-            <span className="text-xs text-fg-muted">
-              {st.done}/{st.total} terverifikasi
-            </span>
-          </div>
+          <p className="text-xs font-semibold text-fg-muted">
+            CHECKLIST REVISI · {st.done}/{st.total} selesai
+          </p>
           {items.map((i) => (
-            <RevisionRow key={i.id} item={i} canAddress={canAddress} inFolder />
+            <RevisionRow
+              key={i.id}
+              item={i}
+              canAddress={canAddress}
+              inFolder
+              needsNewVersion={needsNewVersion(i, latest)}
+            />
           ))}
         </div>
       )}
@@ -539,6 +535,14 @@ function UploadDialog({
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  // API: .pdf/.docx/.zip, at most MAX_UPLOAD_MB (50 by default); the content is checked again server-side
+  const fileError = !file
+    ? null
+    : !/\.(pdf|docx|zip)$/i.test(file.name)
+      ? "Hanya file PDF, DOCX, atau ZIP."
+      : file.size > 50 * 1024 * 1024
+        ? "Ukuran file melebihi 50 MB."
+        : null;
   const m = useAction(
     () => {
       const fd = new FormData();
@@ -566,7 +570,7 @@ function UploadDialog({
           </Button>
           <Button
             loading={m.isPending}
-            disabled={!file}
+            disabled={!file || !!fileError}
             onClick={() => m.mutate()}
           >
             Unggah
@@ -604,6 +608,7 @@ function UploadDialog({
         accept=".pdf,.docx,.zip"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
+      {fileError && <Alert tone="danger">{fileError}</Alert>}
       <Field label="Catatan versi">
         <Textarea
           maxLength={2000}

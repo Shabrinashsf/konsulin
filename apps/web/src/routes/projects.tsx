@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -19,13 +20,14 @@ import {
   Select,
   Textarea,
 } from "../components/ui";
-import { api } from "../lib/api";
+import { api, errorMessage } from "../lib/api";
 import { useMe } from "../lib/auth";
-import { fmtDate, todayWIB } from "../lib/time";
+import { todayWIB } from "../lib/time";
 import { useAction } from "../lib/use-action";
 import {
   PROJECT_TYPE_RULES,
   type Project,
+  type ProjectDetail,
   type ProjectType,
 } from "../lib/types";
 
@@ -34,10 +36,15 @@ export const TYPES = Object.entries(PROJECT_TYPE_RULES) as [
   (typeof PROJECT_TYPE_RULES)[ProjectType],
 ][];
 
+// ProjectQueryDto rejects unknown parameters (400), so only these leave the URL for the API
+const PARAMS = ["q", "type", "degree", "sort", "page"];
+
 export function ProjectsPage() {
   const me = useMe();
   const [sp, setSp] = useSearchParams();
-  const q = Object.fromEntries(sp);
+  const q = Object.fromEntries(
+    [...sp].filter(([k]) => PARAMS.includes(k)),
+  ) as Record<string, string>;
   const set = (k: string, v: string) => {
     const n = new URLSearchParams(sp);
     v ? n.set(k, v) : n.delete(k);
@@ -46,7 +53,12 @@ export function ProjectsPage() {
   };
   const list = useQuery({
     queryKey: ["projects", "list", q],
-    queryFn: () => api.list<Project>("/projects", { ...q, limit: 9 }),
+    queryFn: () => api.list<Project>("/projects", {
+        ...q,
+        limit: 9,
+        // the API defaults to newest-first; titles read A→Z
+        ...(q.sort === "title" && { order: "asc" }),
+      }),
     placeholderData: keepPreviousData,
   });
   const [creating, setCreating] = useState(false);
@@ -114,6 +126,15 @@ export function ProjectsPage() {
       </div>
       {list.isLoading ? (
         <Loading />
+      ) : list.error ? (
+        <div className="flex flex-col items-start gap-3">
+          <Alert tone="danger" title="Daftar project gagal dimuat">
+            {errorMessage(list.error)}
+          </Alert>
+          <Button variant="secondary" onClick={() => setSp({})}>
+            Reset filter
+          </Button>
+        </div>
       ) : !list.data?.data.length ? (
         <Card>
           <Empty icon="folder_shared" title="Belum ada project">
@@ -143,19 +164,9 @@ export function ProjectsPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div>
                 <Badge tone="navy">{p.label}</Badge>
-                {p.requiredDegree && (
-                  <Badge tone="secondary">{p.requiredDegree}</Badge>
-                )}
-                <Badge tone={p.trackMode === "individual" ? "info" : "orange"}>
-                  {p.trackMode === "individual" ? "Individual" : "Shared"}
-                </Badge>
               </div>
-              <p className="text-xs text-fg-muted">
-                {fmtDate(p.startDate)} –{" "}
-                {p.endDate ? fmtDate(p.endDate) : "sekarang"}
-              </p>
             </Link>
           ))}
         </div>
@@ -180,7 +191,7 @@ export function ProjectForm({
 }: {
   open: boolean;
   onClose: () => void;
-  project?: Project;
+  project?: Project | ProjectDetail;
 }) {
   const nav = useNavigate();
   const init = () => ({
@@ -193,20 +204,35 @@ export function ProjectForm({
   const [f, setF] = useState(init);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF({ ...f, [k]: e.target.value });
+  const body = {
+    ...f,
+    description: f.description.trim() || null,
+    endDate: f.endDate || null,
+  };
+  // same limits as CreateProjectDto, so the user sees them before the API answers 400
+  const invalid =
+    f.title.trim().length < 3 ||
+    !f.startDate ||
+    (!!f.endDate && f.endDate < f.startDate);
+  // PATCH answers 409 PROJECT_TYPE_LOCKED once there is a member or a pending invitation
+  const typeLocked =
+    !!project &&
+    "summary" in project &&
+    project.summary.memberCount + (project.summary.pendingInvitationCount ?? 0) >
+      0;
   const save = useAction(
     () =>
       project
         ? api.patch(`/projects/${project.id}`, {
-            ...f,
-            endDate: f.endDate || null,
+            ...body,
             ...(f.type === project.type ? { type: undefined } : {}),
           })
-        : api.post<Project>("/projects", { ...f, endDate: f.endDate || null }),
+        : api.post<Project>("/projects", body),
     {
       success: project ? "Project diperbarui" : "Project dibuat",
       onDone: (r) => {
         onClose();
-        if (!project) nav(`/projects/${(r as Project).id}?tab=undangan`);
+        if (!project) nav(`/projects/${(r as Project).id}?tab=anggota`);
       },
     },
   );
@@ -221,13 +247,17 @@ export function ProjectForm({
           <Button variant="secondary" onClick={onClose}>
             Batal
           </Button>
-          <Button loading={save.isPending} onClick={() => save.mutate()}>
+          <Button
+            loading={save.isPending}
+            disabled={invalid}
+            onClick={() => save.mutate()}
+          >
             Simpan
           </Button>
         </>
       }
     >
-      <Field label="Judul" required>
+      <Field label="Judul" hint="3–200 karakter" required>
         <Input
           value={f.title}
           onChange={set("title")}
@@ -238,9 +268,9 @@ export function ProjectForm({
       <Field
         label="Tipe project"
         required
-        hint={`${rule.degree ? `Khusus mahasiswa ${rule.degree}` : "Semua jenjang"} · ${rule.trackMode === "individual" ? "pekerjaan tiap mahasiswa privat" : "semua anggota melihat semua data"}. Terkunci setelah ada anggota/undangan.`}
+        hint={`${rule.degree ? `Khusus mahasiswa ${rule.degree}` : "Semua jenjang"} · ${rule.trackMode === "individual" ? "pekerjaan tiap mahasiswa privat" : "semua anggota melihat semua data"}. ${typeLocked ? "Terkunci: project sudah punya anggota atau undangan aktif." : "Terkunci setelah ada anggota/undangan."}`}
       >
-        <Select value={f.type} onChange={set("type")}>
+        <Select value={f.type} onChange={set("type")} disabled={typeLocked}>
           {TYPES.map(([k, r]) => (
             <option key={k} value={k}>
               {r.label}
@@ -250,10 +280,20 @@ export function ProjectForm({
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tanggal mulai" required>
-          <Input type="date" value={f.startDate} onChange={set("startDate")} />
+          <Input
+            type="date"
+            value={f.startDate}
+            onChange={set("startDate")}
+            required
+          />
         </Field>
         <Field label="Tanggal selesai">
-          <Input type="date" value={f.endDate} onChange={set("endDate")} />
+          <Input
+            type="date"
+            value={f.endDate}
+            min={f.startDate}
+            onChange={set("endDate")}
+          />
         </Field>
       </div>
       <Field label="Deskripsi">

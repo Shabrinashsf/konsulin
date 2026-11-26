@@ -13,32 +13,15 @@ import {
 import { Logo } from "../components/layout";
 import { useAuth } from "../lib/auth";
 import { api, errorMessage } from "../lib/api";
-import { DEMO_PASSWORD } from "../mock/db";
 import type { StudyProgram } from "../lib/types";
 
-const DEMO = [
-  ["Dr. Budi Santoso", "budi@konsulin.test", "Dosen · 4 project"],
-  ["Andi Pratama", "andi@konsulin.test", "Mahasiswa S1 · TA + riset"],
-  ["Siti Rahma", "siti@konsulin.test", "Mahasiswa S1 · 3 project"],
-  ["Dewi Lestari", "dewi@konsulin.test", "Mahasiswa S1 · TA"],
-  ["Bagus Wicaksono", "bagus@konsulin.test", "Mahasiswa S1 · ada undangan"],
-  ["Rizky Maulana", "rizky@konsulin.test", "Mahasiswa S2"],
-];
-
-function AuthLayout({
-  children,
-  aside,
-}: {
-  children: ReactNode;
-  aside?: ReactNode;
-}) {
+function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-4 lg:flex-row lg:items-start lg:pt-[12vh]">
+    <div className="flex min-h-screen items-center justify-center p-4">
       <div className="card w-full max-w-md p-8">
         <Logo />
         {children}
       </div>
-      {aside}
     </div>
   );
 }
@@ -53,41 +36,14 @@ export function LoginPage() {
     mutationFn: () => login(email, password),
     onSuccess: () => nav(from, { replace: true }),
   });
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={from} replace />;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     m.mutate();
   };
   return (
-    <AuthLayout
-      aside={
-        <div className="card w-full max-w-sm p-5">
-          <p className="font-medium">Akun demo</p>
-          <p className="mb-3 text-xs text-fg-muted">
-            Password semua akun:{" "}
-            <code className="font-medium text-fg">{DEMO_PASSWORD}</code>
-          </p>
-          <div className="flex flex-col gap-1">
-            {DEMO.map(([name, mail, desc]) => (
-              <button
-                key={mail}
-                onClick={() => {
-                  setEmail(mail);
-                  setPassword(DEMO_PASSWORD);
-                }}
-                className="rounded-md px-3 py-2 text-left hover:bg-surface-muted"
-              >
-                <span className="block font-medium">{name}</span>
-                <span className="block text-xs text-fg-muted">
-                  {mail} · {desc}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      }
-    >
+    <AuthLayout>
       <h1 className="mt-6 text-title-page font-medium">Masuk</h1>
       <p className="mb-5 text-fg-muted">
         Bimbingan akademik dalam satu tempat.
@@ -149,8 +105,7 @@ export function RegisterPage() {
     onSuccess: () => {
       toast({
         tone: "success",
-        title: "Registrasi berhasil",
-        text: "Silakan masuk dengan akun baru Anda.",
+        title: "Registrasi berhasil, silakan masuk",
       });
       nav("/login");
     },

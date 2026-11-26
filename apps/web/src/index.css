@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* Tokens copied from tracer-study-web's real CSS (mids.css + mids.light.css), not from its DESIGN-SYSTEM.md.
-   Font is Plus Jakarta Sans by request; ITS navy/yellow stay only for the Konsulin logo. */
+   Font is Inter by request; ITS navy/yellow stay only for the Konsulin logo. */
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   --color-navy: #013880;
   --color-accent: #ffbd07;

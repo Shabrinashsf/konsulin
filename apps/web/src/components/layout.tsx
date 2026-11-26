@@ -1,11 +1,10 @@
 // tracer-study-web shell: fixed 60px top bar (logo, page title, user pill), 240px white sidebar.
 import { useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Avatar, HeaderSlot, Icon, Loading, useToast, ConfirmDialog } from "./ui";
+import { useQuery } from "@tanstack/react-query";
+import { Avatar, HeaderSlot, Icon, Loading } from "./ui";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { resetDb } from "../mock/db";
 import type { Invitation } from "../lib/types";
 
 const MENU = {
@@ -84,11 +83,8 @@ export function AppShell() {
   const { user, ready, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const loc = useLocation();
-  const qc = useQueryClient();
-  const toast = useToast();
   const pending = useQuery({
     queryKey: ["invitations", "me", "pending"],
     queryFn: () =>
@@ -98,7 +94,14 @@ export function AppShell() {
 
   if (!ready) return <Loading />;
   if (!user)
-    return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+    // keep the query too: email links carry it (e.g. /folders/:id?versi=… from E10)
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: loc.pathname + loc.search }}
+      />
+    );
 
   const close = () => setOpen(false);
   const nav = (
@@ -114,17 +117,6 @@ export function AppShell() {
             onClick={close}
           />
         ))}
-      </div>
-      <div className="mt-auto flex flex-col gap-1 px-2.5 pt-2.5 pb-4">
-        <SidebarItem
-          to="/email"
-          icon="mark_email_unread"
-          label={user.role === "lecturer" ? "Email Terkirim" : "Email Masuk"}
-          onClick={close}
-        />
-        <p className="px-2.5 pt-2 text-xs text-fg-muted">
-          Mode demo · data dummy tersimpan di browser ini
-        </p>
       </div>
     </>
   );
@@ -180,15 +172,6 @@ export function AppShell() {
                 </div>
               </div>
               <button
-                className="flex w-full items-center gap-2 rounded-md px-3 py-[15px] font-medium hover:bg-surface-muted"
-                onClick={() => {
-                  setMenu(false);
-                  setResetting(true);
-                }}
-              >
-                <Icon name="restart_alt" /> Reset data demo
-              </button>
-              <button
                 className="flex w-full items-center gap-2 rounded-md px-3 py-[15px] font-medium text-danger hover:bg-surface-muted"
                 onClick={() => logout()}
               >
@@ -227,12 +210,6 @@ export function AppShell() {
           <Outlet />
         </div>
       </main>
-      <ConfirmDialog open={resetting} tone="warning" title="Reset data demo?" confirmLabel="Reset data"
-        onConfirm={() => { resetDb(); qc.invalidateQueries(); setResetting(false); toast({ tone: "info", title: "Data demo direset", text: "Semua perubahan dihapus; data kembali seperti awal." }); }}
-        onClose={() => setResetting(false)}>
-        <p>Semua yang Anda ubah selama demo (project, bimbingan, unggahan, feedback, hari berhalangan) akan dihapus dan data kembali seperti awal.</p>
-        <p className="text-[13px] text-fg-muted">Berlaku untuk semua akun demo di browser ini.</p>
-      </ConfirmDialog>
     </HeaderSlot.Provider>
   );
 }

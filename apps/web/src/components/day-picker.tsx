@@ -21,7 +21,8 @@ export function DayPicker({
   value: string;
   onChange: (d: string) => void;
 }) {
-  const [month, setMonth] = useState(todayWIB().slice(0, 7)); // YYYY-MM
+  // opens on the month of the current value (e.g. rescheduling a meeting next month)
+  const [month, setMonth] = useState((value || todayWIB()).slice(0, 7)); // YYYY-MM
   const first = `${month}-01`;
   const weekday = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
   const from = addDays(first, -weekday),
@@ -34,6 +35,7 @@ export function DayPicker({
         to,
       }),
   });
+  const chosen = days.data?.find((d) => d.date === value);
   const shift = (n: number) => {
     const d = new Date(`${first}T00:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() + n);
@@ -59,6 +61,11 @@ export function DayPicker({
           onClick={() => shift(1)}
         />
       </div>
+      {days.isError && (
+        <p className="mb-2 rounded-md bg-danger-subtle px-3 py-2 text-xs text-danger">
+          Hari tersedia gagal dimuat. Coba ganti bulan atau muat ulang halaman.
+        </p>
+      )}
       <div className="grid grid-cols-7 gap-1 text-center text-xs">
         {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((d) => (
           <span key={d} className="py-1 text-fg-muted">
@@ -82,6 +89,12 @@ export function DayPicker({
           );
         })}
       </div>
+      {chosen?.status === "unavailable" && (
+        <p className="mt-2 text-xs font-medium text-danger">
+          Tanggal yang dipilih tidak tersedia (lewat, lebih dari 60 hari, atau
+          dosen berhalangan). Pilih tanggal lain.
+        </p>
+      )}
       <p className="mt-2 text-xs text-fg-muted">
         <span className="mr-1 inline-block size-2.5 rounded-sm bg-success-subtle align-middle" />
         Tersedia · tanggal coret: lewat, &gt; 60 hari, atau dosen berhalangan

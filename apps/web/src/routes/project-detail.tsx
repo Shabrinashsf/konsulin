@@ -2,7 +2,25 @@
 import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Alert, Avatar, Badge, Button, Card, Chip, Empty, Icon, IconButton, Input, Loading, Modal, PageHeader, Pager, Table, Tabs, ConfirmDialog } from "../components/ui";
+import {
+  Alert,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Chip,
+  Empty,
+  Icon,
+  IconButton,
+  Input,
+  Loading,
+  Modal,
+  PageHeader,
+  Pager,
+  Table,
+  Tabs,
+  ConfirmDialog,
+} from "../components/ui";
 import { InvitationBadge } from "../components/status";
 import { api, errorMessage } from "../lib/api";
 import { useMe } from "../lib/auth";
@@ -18,17 +36,19 @@ import type {
 import { ProjectForm } from "./projects";
 import { ConsultationsTab } from "./tabs/consultations-tab";
 import { FoldersTab } from "./tabs/folders-tab";
-import { LogbookTab, RevisionsTab } from "./tabs/revisions-tab";
+import { LogbookTab } from "./tabs/logbook-tab";
 
-type Tab =
-  "bimbingan" | "submission" | "revisi" | "logbook" | "anggota" | "undangan";
+type Tab = "bimbingan" | "submission" | "logbook" | "anggota";
+// tabs that were merged: old links (?tab=revisi, ?tab=undangan) land on their new home
+const MOVED: Record<string, Tab> = { revisi: "submission", undangan: "anggota" };
 
 export function ProjectDetailPage() {
   const { projectId = "" } = useParams();
   const me = useMe();
   const nav = useNavigate();
   const [sp, setSp] = useSearchParams();
-  const tab = (sp.get("tab") ?? "bimbingan") as Tab;
+  const raw = sp.get("tab") ?? "bimbingan";
+  const tab = (MOVED[raw] ?? raw) as Tab;
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const project = useQuery({
@@ -55,18 +75,8 @@ export function ProjectDetailPage() {
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "bimbingan", label: "Bimbingan" },
     { id: "submission", label: "Submission" },
-    { id: "revisi", label: "Revisi" },
     { id: "logbook", label: "Logbook" },
     { id: "anggota", label: "Anggota", count: p.summary.memberCount },
-    ...(lecturer
-      ? [
-          {
-            id: "undangan" as Tab,
-            label: "Undangan",
-            count: p.summary.pendingInvitationCount ?? 0,
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -80,12 +90,20 @@ export function ProjectDetailPage() {
             {p.requiredDegree && (
               <Badge tone="secondary">{p.requiredDegree}</Badge>
             )}
-            <Badge
-              tone={p.trackMode === "individual" ? "info" : "orange"}
-              icon={p.trackMode === "individual" ? "lock" : "groups"}
+            <span
+              title={
+                p.trackMode === "individual"
+                  ? "Bimbingan, folder, dan revisi tiap mahasiswa hanya terlihat oleh mahasiswa itu dan dosen."
+                  : "Semua anggota melihat bimbingan, folder, dan revisi project ini."
+              }
             >
-              {p.trackMode === "individual" ? "Individual" : "Shared"}
-            </Badge>
+              <Badge
+                tone={p.trackMode === "individual" ? "info" : "orange"}
+                icon={p.trackMode === "individual" ? "lock" : "groups"}
+              >
+                {p.trackMode === "individual" ? "Individual" : "Shared"}
+              </Badge>
+            </span>
             <span className="text-xs">
               · {p.lecturer.name} · {fmtDate(p.startDate)} –{" "}
               {p.endDate ? fmtDate(p.endDate) : "sekarang"}
@@ -116,14 +134,6 @@ export function ProjectDetailPage() {
       {p.description && (
         <p className="-mt-2 mb-4 max-w-3xl text-fg-muted">{p.description}</p>
       )}
-      {!lecturer && p.trackMode === "individual" && (
-        <div className="mb-4">
-          <Alert tone="info">
-            Project individual: bimbingan, folder, dan revisi Anda hanya
-            terlihat oleh Anda dan dosen.
-          </Alert>
-        </div>
-      )}
       <Tabs
         tabs={tabs}
         value={tab}
@@ -132,10 +142,13 @@ export function ProjectDetailPage() {
       <div className="pt-5">
         {tab === "bimbingan" && <ConsultationsTab project={p} />}
         {tab === "submission" && <FoldersTab project={p} />}
-        {tab === "revisi" && <RevisionsTab project={p} />}
         {tab === "logbook" && <LogbookTab project={p} />}
-        {tab === "anggota" && <MembersTab project={p} />}
-        {tab === "undangan" && lecturer && <InvitationsTab project={p} />}
+        {tab === "anggota" && (
+          <div className="flex flex-col gap-5">
+            {lecturer && <InvitationsTab project={p} />}
+            <MembersTab project={p} />
+          </div>
+        )}
       </div>
       {editing && (
         <ProjectForm open project={p} onClose={() => setEditing(false)} />
@@ -165,7 +178,7 @@ export function ProjectDetailPage() {
         </p>
         <Alert tone="warning">
           Bimbingan yang masih aktif akan dibatalkan otomatis dan peserta
-          menerima email pembatalan (E7).
+          menerima email pembatalan.
         </Alert>
       </Modal>
     </>
@@ -176,11 +189,12 @@ function MembersTab({ project }: { project: ProjectDetail }) {
   const me = useMe();
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [removing, setRemoving] = useState<Member | null>(null);
   const list = useQuery({
-    queryKey: ["projects", project.id, "members", q, page],
+    queryKey: ["projects", project.id, "members", q, page, limit],
     queryFn: () =>
-      api.list<Member>(`/projects/${project.id}/members`, { q, page }),
+      api.list<Member>(`/projects/${project.id}/members`, { q, page, limit }),
     placeholderData: keepPreviousData,
   });
   const remove = useAction(
@@ -190,7 +204,8 @@ function MembersTab({ project }: { project: ProjectDetail }) {
   const lecturer = me.role === "lecturer";
   return (
     <Card className="p-2">
-      <div className="p-3">
+      <div className="flex flex-wrap items-center gap-3 p-3">
+        <h3 className="text-title-sub font-medium">Anggota</h3>
         <Input
           className="w-full max-w-xs"
           placeholder="Cari nama atau NRP"
@@ -201,9 +216,11 @@ function MembersTab({ project }: { project: ProjectDetail }) {
           }}
         />
       </div>
-      {!list.data?.data.length ? (
+      {list.isLoading ? (
+        <Loading />
+      ) : !list.data?.data.length ? (
         <Empty icon="group" title="Belum ada anggota">
-          {lecturer && "Undang mahasiswa dari tab Undangan."}
+          {lecturer && "Undang mahasiswa lewat tombol “Undang mahasiswa” di atas."}
         </Empty>
       ) : (
         <Table
@@ -244,7 +261,15 @@ function MembersTab({ project }: { project: ProjectDetail }) {
           ))}
         </Table>
       )}
-      <Pager meta={list.data?.meta} onPage={setPage} />
+      <Pager
+        meta={list.data?.meta}
+        onPage={setPage}
+        limit={limit}
+        onLimit={(n) => {
+          setLimit(n);
+          setPage(1);
+        }}
+      />
       <Modal
         open={!!removing}
         onClose={() => setRemoving(null)}
@@ -269,24 +294,29 @@ function MembersTab({ project }: { project: ProjectDetail }) {
           folder dan bimbingannya tetap tersimpan untuk Anda.
         </p>
         <Alert tone="warning">
-          Bimbingan aktif milik mahasiswa ini dibatalkan otomatis (BR-22) dan
-          email pembatalan terkirim.
+          Bimbingan aktif milik mahasiswa ini dibatalkan otomatis dan email
+          pembatalan terkirim.
         </Alert>
       </Modal>
     </Card>
   );
 }
 
+/** Invitations section on the Anggota tab (lecturer): pending ones first, the rest via the chips. */
 function InvitationsTab({ project }: { project: ProjectDetail }) {
-  const [status, setStatus] = useState<InvitationStatus | "">("");
+  const [status, setStatus] = useState<InvitationStatus | "">("pending");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [inviting, setInviting] = useState(false);
   const list = useQuery({
-    queryKey: ["projects", project.id, "invitations", status],
+    queryKey: ["projects", project.id, "invitations", status, page, limit],
     queryFn: () =>
       api.list<Invitation>(`/projects/${project.id}/invitations`, {
         status,
-        limit: 50,
+        page,
+        limit,
       }),
+    placeholderData: keepPreviousData,
   });
   const [revoking, setRevoking] = useState<Invitation | null>(null);
   const revoke = useAction(
@@ -296,10 +326,18 @@ function InvitationsTab({ project }: { project: ProjectDetail }) {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h3 className="mr-2 text-title-sub font-medium">Undangan</h3>
         {(
-          ["", "pending", "accepted", "declined", "revoked", "expired"] as const
+          ["pending", "", "accepted", "declined", "revoked", "expired"] as const
         ).map((s) => (
-          <Chip key={s} active={status === s} onClick={() => setStatus(s)}>
+          <Chip
+            key={s}
+            active={status === s}
+            onClick={() => {
+              setStatus(s);
+              setPage(1);
+            }}
+          >
             {
               {
                 "": "Semua",
@@ -318,7 +356,9 @@ function InvitationsTab({ project }: { project: ProjectDetail }) {
         </Button>
       </div>
       <Card className="p-2">
-        {!list.data?.data.length ? (
+        {list.isLoading ? (
+          <Loading />
+        ) : !list.data?.data.length ? (
           <Empty icon="mail" title="Belum ada undangan">
             Undangan berlaku 7 hari dan dikirim lewat email (E1).
           </Empty>
@@ -360,11 +400,31 @@ function InvitationsTab({ project }: { project: ProjectDetail }) {
             ))}
           </Table>
         )}
+        <Pager
+          meta={list.data?.meta}
+          onPage={setPage}
+          limit={limit}
+          onLimit={(n) => {
+            setLimit(n);
+            setPage(1);
+          }}
+        />
       </Card>
-      <ConfirmDialog open={!!revoking} title="Tarik undangan?" confirmLabel="Tarik undangan" loading={revoke.isPending}
-        onConfirm={() => revoke.mutate(revoking!.id)} onClose={() => setRevoking(null)}>
-        <p>Undangan untuk <b>{revoking?.student.name}</b> dibatalkan dan tidak bisa diterima lagi.</p>
-        <p className="text-[13px] text-fg-muted">Anda bisa mengirim undangan baru kapan saja.</p>
+      <ConfirmDialog
+        open={!!revoking}
+        title="Tarik undangan?"
+        confirmLabel="Tarik undangan"
+        loading={revoke.isPending}
+        onConfirm={() => revoke.mutate(revoking!.id)}
+        onClose={() => setRevoking(null)}
+      >
+        <p>
+          Undangan untuk <b>{revoking?.student.name}</b> dibatalkan dan tidak
+          bisa diterima lagi.
+        </p>
+        <p className="text-[13px] text-fg-muted">
+          Anda bisa mengirim undangan baru kapan saja.
+        </p>
       </ConfirmDialog>
       {inviting && (
         <InviteModal project={project} onClose={() => setInviting(false)} />
@@ -391,6 +451,16 @@ function InviteModal({
       }),
     placeholderData: keepPreviousData,
   });
+  // GET /students excludes members only; a second invite would be 409 INVITATION_ALREADY_PENDING
+  const pending = useQuery({
+    queryKey: ["projects", project.id, "invitations", "pending", "all"],
+    queryFn: () =>
+      api.list<Invitation>(`/projects/${project.id}/invitations`, {
+        status: "pending",
+        limit: 100,
+      }),
+  });
+  const invited = new Set(pending.data?.data.map((i) => i.student.id));
   const invite = useAction(
     (s: Student) =>
       api.post(`/projects/${project.id}/invitations`, { studentId: s.id }),
@@ -426,15 +496,20 @@ function InviteModal({
                 {s.nrp} · {s.studyProgram?.name} · {s.cohortYear}
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="subtle"
-              icon="send"
-              loading={invite.isPending && invite.variables?.id === s.id}
-              onClick={() => invite.mutate(s)}
-            >
-              Undang
-            </Button>
+            {invited.has(s.id) ? (
+              <Badge tone="warning">Menunggu jawaban</Badge>
+            ) : (
+              <Button
+                size="sm"
+                variant="subtle"
+                icon="send"
+                loading={invite.isPending && invite.variables?.id === s.id}
+                disabled={invite.isPending || pending.isLoading}
+                onClick={() => invite.mutate(s)}
+              >
+                Undang
+              </Button>
+            )}
           </div>
         ))}
         {students.data && !students.data.data.length && (

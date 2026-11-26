@@ -1,5 +1,6 @@
 // US-04 (lecturer) "Hari Berhalangan": pick days on a calendar, see the impact first, then block or reopen them.
-// GET/POST/DELETE /me/blackout-dates, DELETE /me/blackout-dates/:id; impact preview from GET /consultations.
+// GET/POST/DELETE /me/blackout-dates (reopen is always by range, one day = from=to; DELETE /:id is not needed
+// by the UI). Impact preview from GET /consultations; the API's 409 list is what gets confirmed (BR-10).
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
@@ -11,6 +12,7 @@ import {
   Icon,
   IconButton,
   Input,
+  Loading,
   Modal,
   PageHeader,
   useToast,
@@ -105,10 +107,9 @@ export function SchedulePage() {
   const meetings = useQuery({
     queryKey: ["consultations", "schedule", gridFrom],
     queryFn: () =>
-      api.list<Consultation>("/consultations", {
+      api.listAll<Consultation>("/consultations", {
         from: gridFrom,
         to: gridTo,
-        limit: 100,
       }),
     placeholderData: keepPreviousData,
   });
@@ -143,6 +144,8 @@ export function SchedulePage() {
   const selBlocked = selDays.filter((d) => blocked.has(d));
   const selFree = selDays.filter((d) => !blocked.has(d) && d >= today);
   const selMeetings = active.filter((c) => inSel(consultationDate(c)));
+  // the preview only sees the visible 6 weeks; the API's 409 list is what gets confirmed
+  const previewPartial = !!sel && (sel.from < gridFrom || sel.to > gridTo);
   const tooLong = selDays.length > 90;
 
   const block = useAction(
@@ -161,10 +164,9 @@ export function SchedulePage() {
       onDone: (r) => {
         toast({
           tone: "success",
-          title: `${r.created.length} hari ditandai berhalangan`,
-          text: r.cancelledConsultations.length
-            ? `${r.cancelledConsultations.length} bimbingan dibatalkan dan peserta diberi tahu lewat email.`
-            : "Mahasiswa tidak bisa mengajukan bimbingan di hari itu.",
+          title: r.cancelledConsultations.length
+            ? `${r.created.length} hari ditandai berhalangan · ${r.cancelledConsultations.length} bimbingan dibatalkan`
+            : `${r.created.length} hari ditandai berhalangan`,
         });
         setSel(null);
         setReason("");
@@ -183,14 +185,24 @@ export function SchedulePage() {
     },
   );
   const reopen = useAction(
-    (r: { from: string; to: string }) =>
-      api.del<{ deleted: string[] }>("/me/blackout-dates", r),
+    async (r: { from: string; to: string }) => {
+      // DELETE /me/blackout-dates takes at most 90 days per call
+      const deleted: string[] = [];
+      for (let from = r.from; from <= r.to; from = addDays(from, 90)) {
+        const to = addDays(from, 89) < r.to ? addDays(from, 89) : r.to;
+        const res = await api.del<{ deleted: string[] }>("/me/blackout-dates", {
+          from,
+          to,
+        });
+        deleted.push(...res.deleted);
+      }
+      return { deleted };
+    },
     {
       onDone: (x) => {
         toast({
           tone: "success",
           title: `${x.deleted.length} hari dibuka kembali`,
-          text: "Mahasiswa bisa mengajukan bimbingan lagi di hari itu.",
         });
         setSel(null);
       },
@@ -199,10 +211,7 @@ export function SchedulePage() {
 
   return (
     <>
-      <PageHeader
-        title="Hari Berhalangan"
-        subtitle="Tidak ada jam kantor tetap. Mahasiswa bisa mengajukan bimbingan di hari mana pun dalam 60 hari ke depan, kecuali hari yang Anda tandai berhalangan di sini."
-      />
+      <PageHeader title="Hari Berhalangan" />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <Card className="h-fit p-0">
@@ -234,7 +243,8 @@ export function SchedulePage() {
             </Button>
             <div className="flex-1" />
             <span className="hidden text-xs text-fg-muted sm:inline">
-              Klik tanggal · Shift+klik untuk rentang
+              Klik tanggal untuk menandai · Shift+klik untuk rentang · klik hari
+              berhalangan untuk membukanya
             </span>
           </div>
           <div className="p-3 sm:p-4">
@@ -346,28 +356,7 @@ export function SchedulePage() {
         </Card>
 
         <div className="flex flex-col gap-5">
-          {!sel ? (
-            <Card className="flex flex-col gap-3">
-              <h3 className="text-title-sub font-medium">Cara memakai</h3>
-              <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-fg-soft">
-                <li>
-                  Klik tanggal ketika Anda tidak bisa membimbing. Untuk beberapa
-                  hari, Shift+klik tanggal terakhir.
-                </li>
-                <li>
-                  Cek bimbingan yang akan terkena, isi alasan (hanya Anda yang
-                  melihat).
-                </li>
-                <li>
-                  Klik <b className="text-fg">Tandai berhalangan</b>. Mahasiswa
-                  tidak bisa mengajukan bimbingan di hari itu.
-                </li>
-              </ol>
-              <p className="text-xs text-fg-muted">
-                Klik hari yang sudah berhalangan untuk membukanya kembali.
-              </p>
-            </Card>
-          ) : (
+          {sel && (
             <Card className="flex flex-col gap-4">
               <div className="flex items-start gap-2">
                 <div className="flex-1">
@@ -420,7 +409,13 @@ export function SchedulePage() {
 
               {selFree.length > 0 && !tooLong && (
                 <>
-                  {selMeetings.length > 0 ? (
+                  {previewPartial ? (
+                    <p className="text-[13px] text-fg-soft">
+                      Rentang melewati kalender yang tampil. Bimbingan yang
+                      terkena akan ditampilkan untuk dikonfirmasi sebelum ada
+                      yang dibatalkan.
+                    </p>
+                  ) : selMeetings.length > 0 ? (
                     <Alert
                       tone="warning"
                       title={`${selMeetings.length} bimbingan akan dibatalkan`}
@@ -436,7 +431,8 @@ export function SchedulePage() {
                         ))}
                       </ul>
                       <p className="mt-1 text-[13px]">
-                        Peserta menerima email pembatalan.
+                        Anda akan diminta konfirmasi dulu; peserta menerima
+                        email pembatalan.
                       </p>
                     </Alert>
                   ) : (
@@ -456,11 +452,9 @@ export function SchedulePage() {
                     variant={selMeetings.length ? "danger" : "primary"}
                     icon="event_busy"
                     loading={block.isPending}
-                    onClick={() => block.mutate(selMeetings.length > 0)}
+                    onClick={() => block.mutate(false)}
                   >
-                    {selMeetings.length
-                      ? `Tandai & batalkan ${selMeetings.length} bimbingan`
-                      : `Tandai ${selFree.length} hari berhalangan`}
+                    {`Tandai ${selFree.length} hari berhalangan`}
                   </Button>
                 </>
               )}
@@ -492,7 +486,9 @@ export function SchedulePage() {
 
           <Card className="flex flex-col gap-2 p-4">
             <h3 className="text-title-sub font-medium">Akan datang</h3>
-            {!upcoming.data?.data.length ? (
+            {upcoming.isLoading ? (
+              <Loading />
+            ) : !upcoming.data?.data.length ? (
               <Empty icon="event_available" title="Tidak ada hari berhalangan">
                 Semua hari dalam 60 hari ke depan bisa diajukan mahasiswa.
               </Empty>

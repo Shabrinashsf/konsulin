@@ -19,7 +19,7 @@ import {
 import { DeadlineBadge } from "../../components/status";
 import { api } from "../../lib/api";
 import { useMe } from "../../lib/auth";
-import { fmtDateTime, wibDate, wibIso, wibTime } from "../../lib/time";
+import { fmtDateTime, wibDate, wibTime } from "../../lib/time";
 import { useAction } from "../../lib/use-action";
 import type {
   Folder,
@@ -27,7 +27,10 @@ import type {
   ProjectDetail,
   RevisionItemContext,
 } from "../../lib/types";
-import { useProjectRevisions } from "../../components/revision-bits";
+import {
+  RevisionRow,
+  useProjectRevisions,
+} from "../../components/revision-bits";
 
 export function FoldersTab({ project }: { project: ProjectDetail }) {
   const me = useMe();
@@ -37,6 +40,7 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
     filter: "",
     sort: "",
     page: 1,
+    limit: 10,
   });
   const [creating, setCreating] = useState(false);
   const revisions = useProjectRevisions(project.id);
@@ -47,14 +51,51 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
       api.list<Member>(`/projects/${project.id}/members`, { limit: 100 }),
     enabled: lecturer,
   });
+  const items = revisions.data?.data ?? [];
+  // "Ada revisi terbuka" is counted from the revision items, so it filters the full folder list here
+  const byRevision = f.filter === "revisi";
+  const allFolders = useQuery({
+    queryKey: ["folders", project.id, "all"],
+    queryFn: () => api.listAll<Folder>(`/projects/${project.id}/folders`),
+  });
+  const withOpen = new Set(
+    items.filter((i) => i.status !== "verified").map((i) => i.folder.id),
+  );
+  const matching = (allFolders.data?.data ?? [])
+    .filter(
+      (x) =>
+        withOpen.has(x.id) &&
+        (!f.studentId || x.studentId === f.studentId) &&
+        x.title.toLowerCase().includes(f.q.trim().toLowerCase()),
+    )
+    .sort((a, b) =>
+      f.sort === "deadline"
+        ? (a.deadlineAt ?? "\uffff").localeCompare(b.deadlineAt ?? "\uffff")
+        : 0,
+    );
+  // versions are numbered max + 1 and never deleted, so versionCount is the latest version number
+  const latest = new Map(
+    (allFolders.data?.data ?? []).map((x) => [x.id, x.versionCount]),
+  );
+  const mine = items.filter((i) =>
+    lecturer
+      ? i.status === "addressed" &&
+        (!f.studentId || i.folder.studentId === f.studentId)
+      : (i.status === "open" || i.status === "reopened") &&
+        (!i.folder.studentId || i.folder.studentId === me.id),
+  );
   const list = useQuery({
+    enabled: !byRevision,
     queryKey: ["folders", project.id, f],
     queryFn: () =>
       api.list<Folder>(`/projects/${project.id}/folders`, {
         q: f.q,
         studentId: f.studentId,
         page: f.page,
+        limit: f.limit,
         sort: f.sort,
+        // the API's default order is newest/farthest first; "terdekat" is ascending
+        order: f.sort === "deadline" ? "asc" : undefined,
         hasDeadline:
           f.filter === "deadline"
             ? true
@@ -66,15 +107,31 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
     placeholderData: keepPreviousData,
   });
   const set = (k: keyof typeof f, v: string) => setF({ ...f, [k]: v, page: 1 });
+  const shown = byRevision
+    ? {
+        data: matching.slice((f.page - 1) * f.limit, f.page * f.limit),
+        meta: {
+          page: f.page,
+          limit: f.limit,
+          total: matching.length,
+          totalPages: Math.max(1, Math.ceil(matching.length / f.limit)),
+        },
+      }
+    : list.data;
+  const loading = byRevision
+    ? allFolders.isLoading || revisions.isLoading
+    : list.isLoading;
 
   return (
     <>
+      <ActionPanel items={mine} lecturer={lecturer} latest={latest} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {[
           ["", "Semua"],
           ["deadline", "Ada deadline"],
           ["nodeadline", "Tanpa deadline"],
           ["overdue", "Lewat deadline"],
+          ["revisi", "Ada revisi terbuka"],
         ].map(([v, l]) => (
           <Chip
             key={v}
@@ -117,18 +174,22 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
           Folder baru
         </Button>
       </div>
-      {list.isLoading ? (
+      {loading ? (
         <Loading />
-      ) : !list.data?.data.length ? (
+      ) : !shown?.data.length ? (
         <Card>
-          <Empty icon="folder" title="Belum ada folder">
-            Folder per deliverable (mis. Bab 1). Setiap unggahan menjadi versi
-            baru.
-          </Empty>
+          {byRevision ? (
+            <Empty icon="task_alt" title="Tidak ada folder dengan revisi terbuka" />
+          ) : (
+            <Empty icon="folder" title="Belum ada folder">
+              Folder per deliverable (mis. Bab 1). Setiap unggahan menjadi
+              versi baru.
+            </Empty>
+          )}
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {list.data.data.map((x) => (
+          {shown.data.map((x) => (
             <Link
               key={x.id}
               to={`/folders/${x.id}`}
@@ -153,9 +214,7 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
                 )}
               </div>
               <RevisionSummary
-                items={(revisions.data?.data ?? []).filter(
-                  (i) => i.folder.id === x.id,
-                )}
+                items={items.filter((i) => i.folder.id === x.id)}
                 versionCount={x.versionCount}
                 lecturer={lecturer}
               />
@@ -163,7 +222,12 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
           ))}
         </div>
       )}
-      <Pager meta={list.data?.meta} onPage={(page) => setF({ ...f, page })} />
+      <Pager
+        meta={shown?.meta}
+        onPage={(page) => setF({ ...f, page })}
+        limit={f.limit}
+        onLimit={(limit) => setF({ ...f, limit, page: 1 })}
+      />
       {creating && (
         <FolderForm
           project={project}
@@ -172,6 +236,61 @@ export function FoldersTab({ project }: { project: ProjectDetail }) {
         />
       )}
     </>
+  );
+}
+
+const PREVIEW = 3;
+
+/** What waits on the viewer across this project's folders: items to fix (student) or to review (lecturer). */
+function ActionPanel({
+  items,
+  lecturer,
+  latest,
+}: {
+  items: RevisionItemContext[];
+  lecturer: boolean;
+  latest: Map<string, number>;
+}) {
+  const [all, setAll] = useState(false);
+  if (!items.length) return null;
+  return (
+    <Card className="mb-4 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <h3 className="flex-1 text-title-sub font-medium">
+          {lecturer ? "Menunggu review Anda" : "Perlu tindakan Anda"}{" "}
+          <span className="text-fg-muted">({items.length})</span>
+        </h3>
+        {items.length > PREVIEW && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={all ? "expand_less" : "expand_more"}
+            onClick={() => setAll(!all)}
+          >
+            {all ? "Tampilkan lebih sedikit" : "Tampilkan semua"}
+          </Button>
+        )}
+      </div>
+      {(all ? items : items.slice(0, PREVIEW)).map((i) => {
+        const v = latest.get(i.folder.id);
+        return (
+          <RevisionRow
+            key={i.id}
+            item={i}
+            showFolder
+            canAddress={!lecturer}
+            needsNewVersion={
+              !lecturer &&
+              v !== undefined &&
+              Math.max(
+                i.version.versionNumber,
+                i.addressedInVersion?.versionNumber ?? 0,
+              ) >= v
+            }
+          />
+        );
+      })}
+    </Card>
   );
 }
 
@@ -253,13 +372,36 @@ export function FolderForm({
     date: folder?.deadlineAt ? wibDate(folder.deadlineAt) : "",
     time: folder?.deadlineAt ? wibTime(folder.deadlineAt) : "23:59",
   });
-  const deadlineAt = f.date ? wibIso(f.date, f.time) : null;
+  // an empty time input gives an invalid date (toISOString would throw), so build the instant safely
+  const instant = f.date ? new Date(`${f.date}T${f.time}:00+07:00`) : null;
+  const deadlineAt =
+    instant && !Number.isNaN(instant.getTime()) ? instant.toISOString() : null;
+  // PATCH re-validates a sent deadline as "in the future", so an unchanged (possibly passed) one is not sent
+  const deadlineChanged = folder?.deadlineAt
+    ? f.date !== wibDate(folder.deadlineAt) ||
+      f.time !== wibTime(folder.deadlineAt)
+    : !!f.date;
+  const deadlineError =
+    !lecturer || !f.date || (!!folder && !deadlineChanged)
+      ? null
+      : !deadlineAt
+        ? "Isi jam deadline."
+        : instant!.getTime() <= Date.now()
+          ? "Deadline harus di masa depan."
+          : null;
+  const invalid =
+    !f.title.trim() ||
+    (!folder &&
+      lecturer &&
+      project?.trackMode === "individual" &&
+      !f.studentId) ||
+    !!deadlineError;
   const save = useAction(
     () => {
       const body = {
-        title: f.title,
-        description: f.description || null,
-        ...(lecturer ? { deadlineAt } : {}),
+        title: f.title.trim(),
+        description: f.description.trim() || null,
+        ...(lecturer && (!folder || deadlineChanged) ? { deadlineAt } : {}),
       };
       return folder
         ? api.patch<Folder>(`/folders/${folder.id}`, body)
@@ -289,15 +431,20 @@ export function FolderForm({
           <Button variant="secondary" onClick={onClose}>
             Batal
           </Button>
-          <Button loading={save.isPending} onClick={() => save.mutate()}>
+          <Button
+            loading={save.isPending}
+            disabled={invalid}
+            onClick={() => save.mutate()}
+          >
             Simpan
           </Button>
         </>
       }
     >
-      <Field label="Judul" required>
+      <Field label="Judul" hint="1–200 karakter" required>
         <Input
           value={f.title}
+          maxLength={200}
           onChange={(e) => setF({ ...f, title: e.target.value })}
           placeholder="mis. Bab 2 Tinjauan Pustaka"
         />
@@ -331,7 +478,7 @@ export function FolderForm({
         <div className="grid grid-cols-[1fr_120px] gap-3">
           <Field
             label="Deadline (opsional)"
-            hint="Kosongkan untuk tanpa deadline. Harus di masa depan."
+            hint={deadlineError ?? "Kosongkan untuk tanpa deadline. Harus di masa depan."}
           >
             <Input
               type="date"

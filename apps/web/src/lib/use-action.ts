@@ -22,7 +22,7 @@ export function useAction<V = void, R = unknown>(
     },
     onError: (e) => {
       if (!opts.onError?.(e))
-        toast({ tone: "danger", title: "Gagal", text: errorMessage(e) });
+        toast({ tone: "danger", title: errorMessage(e) });
     },
   });
 }

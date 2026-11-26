@@ -16,12 +16,12 @@ export const useProjectRevisions = (
 ) =>
   useQuery({
     queryKey: ["revision-items", projectId, "all", params],
-    // ponytail: one page of 100 items per project; paginate here if a project ever has more.
+    // all pages: the tabs count and group client-side, so a first page of 100 would undercount
     queryFn: () =>
-      api.list<RevisionItemContext>(`/projects/${projectId}/revision-items`, {
-        ...params,
-        limit: 100,
-      }),
+      api.listAll<RevisionItemContext>(
+        `/projects/${projectId}/revision-items`,
+        params,
+      ),
     enabled: !!projectId,
   });
 
@@ -31,11 +31,14 @@ export function RevisionRow({
   showFolder,
   canAddress,
   inFolder,
+  needsNewVersion,
 }: {
   item: RevisionItemContext;
   showFolder?: boolean;
   canAddress: boolean;
   inFolder?: boolean;
+  /** No version newer than this item's yet: the student has to upload first (the folder page says so once). */
+  needsNewVersion?: boolean;
 }) {
   const me = useMe();
   const [addressing, setAddressing] = useState(false);
@@ -48,8 +51,8 @@ export function RevisionRow({
       onDone: (d) => {
         setReopening(false);
         toast(d === "verify"
-          ? { tone: "success", title: "Item diverifikasi", text: i.description }
-          : { tone: "warning", title: "Dikembalikan ke mahasiswa", text: "Mahasiswa diminta memperbaiki ulang item ini." });
+          ? { tone: "success", title: "Item diverifikasi" }
+          : { tone: "warning", title: "Dikembalikan ke mahasiswa" });
       },
     },
   );
@@ -65,31 +68,34 @@ export function RevisionRow({
         <p className={done ? "text-fg-muted line-through" : ""}>
           {i.description}
         </p>
-        <p className="text-xs text-fg-muted">
-          {showFolder && (
-            <>
-              <Link className="text-link" to={`/folders/${i.folder.id}`}>
-                {i.folder.title}
-              </Link>{" "}
-              ·{" "}
-            </>
-          )}
-          {inFolder ? (
-            `dari feedback v${i.version.versionNumber}`
-          ) : (
-            <Link
-              className="text-link"
-              to={`/folders/${i.folder.id}?versi=${i.version.id}`}
-            >
-              dari feedback v{i.version.versionNumber}
-            </Link>
-          )}
-          {i.addressedInVersion &&
-            ` · diperbaiki di v${i.addressedInVersion.versionNumber}`}
-          {i.addressedNote && ` — “${i.addressedNote}”`}
-        </p>
+        {(!inFolder || i.addressedInVersion) && (
+          <p className="text-xs text-fg-muted">
+            {showFolder && (
+              <>
+                <Link className="text-link" to={`/folders/${i.folder.id}`}>
+                  {i.folder.title}
+                </Link>{" "}
+                ·{" "}
+              </>
+            )}
+            {!inFolder && (
+              <Link
+                className="text-link"
+                to={`/folders/${i.folder.id}?versi=${i.version.id}`}
+              >
+                dari feedback v{i.version.versionNumber}
+              </Link>
+            )}
+            {i.addressedInVersion &&
+              `${inFolder ? "" : " · "}diperbaiki di v${i.addressedInVersion.versionNumber}`}
+            {i.addressedNote && ` — “${i.addressedNote}”`}
+          </p>
+        )}
       </div>
-      <RevisionBadge value={i.status} />
+      {/* the student's own untouched item needs no label: the button (or the hint) says what to do */}
+      {!(canAddress && i.status === "open") && (
+        <RevisionBadge value={i.status} />
+      )}
       {me.role === "lecturer" && i.status === "addressed" && (
         <>
           <Button
@@ -118,16 +124,20 @@ export function RevisionRow({
         <p className="font-medium">{i.description}</p>
         <p className="text-fg-soft">Perbaikan di v{i.addressedInVersion?.versionNumber} dianggap belum sesuai. Status menjadi “Perlu perbaikan ulang” dan mahasiswa harus mengunggah versi yang lebih baru lalu menandai item ini lagi.</p>
       </ConfirmDialog>
-      {canAddress && (i.status === "open" || i.status === "reopened") && (
-        <Button
-          size="sm"
-          variant="subtle"
-          icon="task_alt"
-          onClick={() => setAddressing(true)}
-        >
-          Tandai sudah diperbaiki
-        </Button>
-      )}
+      {canAddress &&
+        (i.status === "open" || i.status === "reopened") &&
+        (needsNewVersion ? (
+          <span className="text-xs text-fg-muted">Perlu versi baru</span>
+        ) : (
+          <Button
+            size="sm"
+            variant="subtle"
+            icon="task_alt"
+            onClick={() => setAddressing(true)}
+          >
+            Tandai sudah diperbaiki
+          </Button>
+        ))}
       {addressing && (
         <AddressDialog item={i} onClose={() => setAddressing(false)} />
       )}
@@ -144,9 +154,9 @@ export function AddressDialog({
   onClose: () => void;
 }) {
   const versions = useQuery({
+    // same key as the folder page, so it must fetch the same thing (every page)
     queryKey: ["folders", item.folder.id, "versions"],
-    queryFn: () =>
-      api.list<Version>(`/folders/${item.folder.id}/versions`, { limit: 100 }),
+    queryFn: () => api.listAll<Version>(`/folders/${item.folder.id}/versions`),
   });
   const min = Math.max(
     item.version.versionNumber,
@@ -162,7 +172,7 @@ export function AddressDialog({
     () =>
       api.post(`/revision-items/${item.id}/address`, {
         versionId,
-        note: note || undefined,
+        note: note.trim() || undefined,
       }),
     { success: "Item ditandai sudah diperbaiki", onDone: onClose },
   );
@@ -196,7 +206,9 @@ export function AddressDialog({
           . Unggah versi perbaikan (v{min + 1}) di folder{" "}
           <Link
             className="font-medium text-link"
-            to={`/folders/${item.folder.id}`}
+            // ?unggah=1 opens the upload dialog, also when we are already on that folder's page
+            to={`/folders/${item.folder.id}?unggah=1`}
+            onClick={onClose}
           >
             {item.folder.title}
           </Link>
@@ -223,6 +235,7 @@ export function AddressDialog({
           <Field label="Catatan untuk dosen">
             <Input
               value={note}
+              maxLength={2000}
               onChange={(e) => setNote(e.target.value)}
               placeholder="mis. Diperbaiki di subbab 1.3"
             />
@@ -279,6 +292,7 @@ export function FeedbackDialog({
       <Field label="Isi feedback" required>
         <Textarea
           rows={4}
+          maxLength={10000}
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder="Komentar umum untuk versi ini"
@@ -300,6 +314,7 @@ export function FeedbackDialog({
             />
             <Input
               className="flex-1"
+              maxLength={1000}
               value={it}
               placeholder={
                 idx ? `Item ${idx + 1}` : "mis. Perjelas batasan masalah"

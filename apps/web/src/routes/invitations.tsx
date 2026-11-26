@@ -1,8 +1,19 @@
 // US-03 (student): GET /invitations/me, POST /invitations/:id/respond.
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useQuery } from "@tanstack/react-query";
-import { Button, Card, Chip, Empty, IconBox, Loading, PageHeader, useToast, ConfirmDialog } from "../components/ui";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  Button,
+  Card,
+  Chip,
+  Empty,
+  IconBox,
+  Loading,
+  PageHeader,
+  Pager,
+  useToast,
+  ConfirmDialog,
+} from "../components/ui";
 import { InvitationBadge } from "../components/status";
 import { api } from "../lib/api";
 import { fmtDateTime } from "../lib/time";
@@ -11,10 +22,12 @@ import type { Invitation, InvitationStatus } from "../lib/types";
 
 export function InvitationsPage() {
   const [status, setStatus] = useState<InvitationStatus | "">("pending");
+  const [page, setPage] = useState(1);
   const list = useQuery({
-    queryKey: ["invitations", "me", status],
+    queryKey: ["invitations", "me", status, page],
     queryFn: () =>
-      api.list<Invitation>("/invitations/me", { status, limit: 50 }),
+      api.list<Invitation>("/invitations/me", { status, page, limit: 20 }),
+    placeholderData: keepPreviousData,
   });
   const nav = useNavigate();
   const toast = useToast();
@@ -31,22 +44,21 @@ export function InvitationsPage() {
           toast({
             tone: "success",
             title: "Anda bergabung ke project",
-            text: "Ajukan bimbingan dari tab Bimbingan atau Kalender.",
           });
           nav(`/projects/${x.projectId}`);
         } else {
           setDeclining(null);
-          toast({ tone: "info", title: "Undangan ditolak", text: "Dosen bisa mengirim undangan baru bila perlu." });
+          toast({
+            tone: "info",
+            title: "Undangan ditolak",
+          });
         }
       },
     },
   );
   return (
     <>
-      <PageHeader
-        title="Undangan project"
-        subtitle="Dosen mengundang Anda ke project bimbingan. Undangan berlaku 7 hari."
-      />
+      <PageHeader title="Undangan project" />
       <div className="mb-4 flex flex-wrap gap-2">
         {(
           [
@@ -58,7 +70,14 @@ export function InvitationsPage() {
             ["revoked", "Ditarik"],
           ] as const
         ).map(([v, l]) => (
-          <Chip key={v} active={status === v} onClick={() => setStatus(v)}>
+          <Chip
+            key={v}
+            active={status === v}
+            onClick={() => {
+              setStatus(v);
+              setPage(1);
+            }}
+          >
             {l}
           </Chip>
         ))}
@@ -129,10 +148,30 @@ export function InvitationsPage() {
           ))}
         </div>
       )}
-      <ConfirmDialog open={!!declining} tone="warning" title="Tolak undangan?" confirmLabel="Tolak undangan" loading={respond.isPending}
-        onConfirm={() => respond.mutate({ id: declining!.id, action: "decline", projectId: declining!.project.id })} onClose={() => setDeclining(null)}>
-        <p>Anda tidak akan bergabung ke <b>{declining?.project.title}</b> ({declining?.project.lecturer.name}).</p>
-        <p className="text-[13px] text-fg-muted">Undangan yang ditolak tidak bisa diterima lagi; dosen perlu mengirim undangan baru.</p>
+      <Pager meta={list.data?.meta} onPage={setPage} />
+      <ConfirmDialog
+        open={!!declining}
+        tone="warning"
+        title="Tolak undangan?"
+        confirmLabel="Tolak undangan"
+        loading={respond.isPending}
+        onConfirm={() =>
+          respond.mutate({
+            id: declining!.id,
+            action: "decline",
+            projectId: declining!.project.id,
+          })
+        }
+        onClose={() => setDeclining(null)}
+      >
+        <p>
+          Anda tidak akan bergabung ke <b>{declining?.project.title}</b> (
+          {declining?.project.lecturer.name}).
+        </p>
+        <p className="text-[13px] text-fg-muted">
+          Undangan yang ditolak tidak bisa diterima lagi; dosen perlu mengirim
+          undangan baru.
+        </p>
       </ConfirmDialog>
     </>
   );

@@ -50,13 +50,15 @@ export function ConsultationsTab({ project }: { project: ProjectDetail }) {
   const me = useMe();
   const [status, setStatus] = useState<ConsultationView | "">("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [modal, setModal] = useState(false);
   const list = useQuery({
-    queryKey: ["consultations", "project", project.id, status, page],
+    queryKey: ["consultations", "project", project.id, status, page, limit],
     queryFn: () =>
       api.list<Consultation>(`/projects/${project.id}/consultations`, {
         status,
         page,
+        limit,
       }),
     placeholderData: keepPreviousData,
   });
@@ -112,7 +114,15 @@ export function ConsultationsTab({ project }: { project: ProjectDetail }) {
             ))}
           </div>
         )}
-        <Pager meta={list.data?.meta} onPage={setPage} />
+        <Pager
+          meta={list.data?.meta}
+          onPage={setPage}
+          limit={limit}
+          onLimit={(n) => {
+            setLimit(n);
+            setPage(1);
+          }}
+        />
       </Card>
       {modal &&
         (lecturer ? (
@@ -132,6 +142,18 @@ export function RequestModal({
   onClose: () => void;
 }) {
   const nav = useNavigate();
+  const me = useMe();
+  // BR-19: one live request per student per project; "requested" excludes expired ones (API statusWhere)
+  const pending = useQuery({
+    queryKey: ["consultations", "project", project.id, "pending", me.id],
+    queryFn: () =>
+      api.list<Consultation>(`/projects/${project.id}/consultations`, {
+        status: "requested",
+        studentId: me.id,
+        limit: 1,
+      }),
+  });
+  const live = pending.data?.data[0];
   const [f, setF] = useState({
     requestedDate: "",
     topic: "",
@@ -139,8 +161,17 @@ export function RequestModal({
     mode: "offline" as Mode,
     note: "",
   });
+  const invalid =
+    !!live ||
+    !f.requestedDate ||
+    f.topic.trim().length < 3 ||
+    !f.agenda.trim();
   const submit = useAction(
-    () => api.post<Consultation>(`/projects/${project.id}/consultations`, f),
+    () =>
+      api.post<Consultation>(`/projects/${project.id}/consultations`, {
+        ...f,
+        note: f.note.trim() || null,
+      }),
     {
       success: "Pengajuan terkirim ke dosen",
       onDone: (c) => nav(`/consultations/${c.id}`),
@@ -159,7 +190,7 @@ export function RequestModal({
           </Button>
           <Button
             loading={submit.isPending}
-            disabled={!f.requestedDate}
+            disabled={invalid}
             onClick={() => submit.mutate()}
           >
             Kirim pengajuan
@@ -167,10 +198,20 @@ export function RequestModal({
         </>
       }
     >
-      <Alert tone="info">
-        Pilih <b>tanggal</b> saja. Jam bimbingan disepakati bersama{" "}
-        {project.lecturer.name} setelah ajuan terkirim.
-      </Alert>
+      {live ? (
+        <Alert tone="warning" title="Masih ada ajuan aktif di project ini">
+          Ajuan “{live.topic}” belum selesai. Tunggu dijawab{" "}
+          {project.lecturer.name} atau batalkan dulu sebelum mengajukan lagi.{" "}
+          <Link className="font-medium text-link" to={`/consultations/${live.id}`}>
+            Buka ajuan
+          </Link>
+        </Alert>
+      ) : (
+        <Alert tone="info">
+          Pilih <b>tanggal</b> saja. Jam bimbingan disepakati bersama{" "}
+          {project.lecturer.name} setelah ajuan terkirim.
+        </Alert>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <DayPicker
@@ -184,10 +225,11 @@ export function RequestModal({
           </p>
         </div>
         <div className="flex flex-col gap-3">
-          <Field label="Topik" required>
+          <Field label="Topik" hint="3–200 karakter" required>
             <Input
               value={f.topic}
               onChange={(e) => setF({ ...f, topic: e.target.value })}
+              maxLength={200}
               placeholder="mis. Review Bab 2"
             />
           </Field>
@@ -232,7 +274,7 @@ export function ScheduleModal({
     queryFn: () =>
       api.list<Member>(`/projects/${project.id}/members`, { limit: 100 }),
   });
-  const time = useTimeFields();
+  const time = useTimeFields(project.id);
   const [f, setF] = useState({
     studentId: "",
     topic: "",
@@ -240,6 +282,12 @@ export function ScheduleModal({
     mode: "offline" as Mode,
     location: "",
   });
+  const invalid =
+    !f.studentId ||
+    f.topic.trim().length < 3 ||
+    !f.agenda.trim() ||
+    !f.location.trim() ||
+    !!time.error;
   const submit = useAction(
     () =>
       api.post<Consultation>(`/projects/${project.id}/consultations/schedule`, {
@@ -262,15 +310,16 @@ export function ScheduleModal({
           <Button variant="secondary" onClick={onClose}>
             Batal
           </Button>
-          <Button loading={submit.isPending} onClick={() => submit.mutate()}>
+          <Button
+            loading={submit.isPending}
+            disabled={invalid}
+            onClick={() => submit.mutate()}
+          >
             Jadwalkan
           </Button>
         </>
       }
     >
-      <p className="text-fg-muted">
-        Langsung berstatus disetujui. Peserta menerima undangan kalender (E5).
-      </p>
       <Field label="Mahasiswa" required>
         <Select
           value={f.studentId}
@@ -291,9 +340,10 @@ export function ScheduleModal({
         onMode={(mode) => setF({ ...f, mode })}
         onLocation={(location) => setF({ ...f, location })}
       />
-      <Field label="Topik" required>
+      <Field label="Topik" hint="3–200 karakter" required>
         <Input
           value={f.topic}
+          maxLength={200}
           onChange={(e) => setF({ ...f, topic: e.target.value })}
         />
       </Field>

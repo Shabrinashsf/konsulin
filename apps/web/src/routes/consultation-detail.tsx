@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Alert,
   Avatar,
-  Badge,
   Button,
   Card,
   Field,
@@ -15,7 +14,6 @@ import {
   Modal,
   PageHeader,
   Textarea,
-  Track,
 } from "../components/ui";
 import { ModeBadge } from "../components/status";
 import {
@@ -71,48 +69,8 @@ export function ConsultationDetailPage() {
   const other = lecturer ? c.student.name : c.lecturer.name;
   const close = () => setDialog(null);
 
-  const steps = [
-    {
-      title: "Ajuan",
-      subtitle:
-        c.status === "requested"
-          ? `Giliran ${c.turn === "lecturer" ? "dosen" : "mahasiswa"}`
-          : c.status === "rejected"
-            ? "Ditolak dosen"
-            : c.status === "expired"
-              ? "Kedaluwarsa"
-              : `Diminta ${fmtLongDate(c.requestedDate)}`,
-      state:
-        c.status === "requested"
-          ? ("active" as const)
-          : c.status === "rejected" || c.status === "expired"
-            ? ("rejected" as const)
-            : ("done" as const),
-    },
-    {
-      title: "Disetujui",
-      subtitle:
-        c.status === "approved" || c.status === "completed"
-          ? fmtRange(c.startAt, c.endAt)
-          : c.status === "cancelled"
-            ? "Dibatalkan"
-            : "-",
-      state:
-        c.status === "approved"
-          ? ("active" as const)
-          : c.status === "completed"
-            ? ("done" as const)
-            : c.status === "cancelled"
-              ? ("rejected" as const)
-              : ("pending" as const),
-    },
-    {
-      title: "Selesai & logbook",
-      subtitle: c.status === "completed" ? "Ringkasan masuk logbook" : "-",
-      state:
-        c.status === "completed" ? ("done" as const) : ("pending" as const),
-    },
-  ];
+  const reject = () => setDialog("reject");
+  const cancel = () => setDialog("cancel");
 
   return (
     <>
@@ -129,10 +87,7 @@ export function ConsultationDetailPage() {
       />
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="flex flex-col gap-5">
-          <Card>
-            <Track steps={steps} />
-          </Card>
-          <NextStep
+          <Banner
             c={c}
             lecturer={lecturer}
             canWrite={canWrite}
@@ -142,26 +97,10 @@ export function ConsultationDetailPage() {
 
           {c.status === "requested" && (
             <Card className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <Icon name="schedule" className="text-[24px] text-primary" />
-                <h2 className="flex-1 text-title-sub font-medium">
-                  Jam bimbingan
-                </h2>
-                {myTurn ? (
-                  <Badge tone="warning" icon="touch_app">
-                    Giliran Anda
-                  </Badge>
-                ) : (
-                  <span className="text-xs text-fg-muted">
-                    Menunggu{" "}
-                    {c.turn === "lecturer" ? c.lecturer.name : c.student.name}
-                  </span>
-                )}
-              </div>
               {c.startAt ? (
-                <div className="rounded-lg bg-surface-muted p-4">
+                <div>
                   <p className="text-xs text-fg-muted">
-                    Diusulkan oleh{" "}
+                    Usulan{" "}
                     {c.proposedBy === "lecturer"
                       ? c.lecturer.name
                       : c.student.name}
@@ -170,70 +109,46 @@ export function ConsultationDetailPage() {
                     {fmtRange(c.startAt, c.endAt)}
                   </p>
                   {c.location && <p className="text-fg-muted">{c.location}</p>}
-                  {started && (
-                    <p className="mt-1 text-xs text-danger">
-                      Waktu usulan sudah lewat — ajukan waktu baru.
-                    </p>
-                  )}
                 </div>
               ) : (
                 <p className="text-fg-muted">
-                  Belum ada usulan jam. Mahasiswa meminta tanggal{" "}
-                  <b className="text-fg">{fmtLongDate(c.requestedDate)}</b>
-                  {lecturer
-                    ? "; usulkan jam dan lokasi."
-                    : "; menunggu dosen mengusulkan jam."}
+                  Tanggal diminta{" "}
+                  <b className="text-fg">{fmtLongDate(c.requestedDate)}</b> ·
+                  belum ada usulan jam
                 </p>
               )}
               {canWrite && (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2">
                   {myTurn && c.startAt && !started && (
-                    <ActionRow desc="Jam ini menjadi jadwal tetap. Semua peserta mendapat undangan kalender lewat email.">
-                      <Button icon="check" onClick={() => setDialog("accept")}>
-                        Terima usulan
-                      </Button>
-                    </ActionRow>
+                    <Button icon="check" onClick={() => setDialog("accept")}>
+                      Terima usulan
+                    </Button>
                   )}
                   {myTurn && (
-                    <ActionRow
-                      desc={`Kirim jam${lecturer ? " dan lokasi" : ""} lain. Ajuan tetap berjalan dan giliran berpindah ke ${other}.`}
+                    <Button
+                      variant={c.startAt && !started ? "outline" : "primary"}
+                      icon="update"
+                      onClick={() => setDialog("propose")}
                     >
-                      <Button
-                        variant={c.startAt && !started ? "outline" : "primary"}
-                        icon="update"
-                        onClick={() => setDialog("propose")}
-                      >
-                        {c.startAt ? "Usulkan jam lain" : "Usulkan jam"}
-                      </Button>
-                    </ActionRow>
+                      {c.startAt ? "Usulkan jam lain" : "Usulkan jam"}
+                    </Button>
                   )}
-                  {myTurn && lecturer && (
-                    <ActionRow desc="Tutup ajuan karena tidak bisa dipenuhi, dengan alasan. Tidak ada pertemuan; mahasiswa bisa mengirim ajuan baru.">
-                      <Button
-                        variant="subtle-danger"
-                        icon="block"
-                        onClick={() => setDialog("reject")}
-                      >
-                        Tolak ajuan
-                      </Button>
-                    </ActionRow>
-                  )}
-                  {(!lecturer || !myTurn) && (
-                    <ActionRow
-                      desc={
-                        lecturer
-                          ? "Tutup ajuan saat sedang menunggu mahasiswa, mis. topiknya sudah dibahas. Mahasiswa diberi tahu lewat email."
-                          : "Tarik ajuan Anda sendiri bila sudah tidak perlu. Tidak ada pertemuan; Anda bisa mengajukan lagi kapan saja."
-                      }
-                    >
-                      <Button
-                        variant="secondary"
-                        icon="close"
-                        onClick={() => setDialog("cancel")}
-                      >
-                        Batalkan ajuan
-                      </Button>
-                    </ActionRow>
+                  {myTurn ? (
+                    <More>
+                      {lecturer ? (
+                        <MenuItem icon="block" onClick={reject}>
+                          Tolak ajuan
+                        </MenuItem>
+                      ) : (
+                        <MenuItem icon="close" onClick={cancel}>
+                          Batalkan ajuan
+                        </MenuItem>
+                      )}
+                    </More>
+                  ) : (
+                    <Button variant="secondary" icon="close" onClick={cancel}>
+                      Batalkan ajuan
+                    </Button>
                   )}
                 </div>
               )}
@@ -242,15 +157,6 @@ export function ConsultationDetailPage() {
 
           {c.status === "approved" && (
             <Card className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Icon
-                  name="event_available"
-                  className="text-[24px] text-success"
-                />
-                <h2 className="text-title-sub font-medium">
-                  Jadwal disepakati
-                </h2>
-              </div>
               <p className="text-title-section font-medium">
                 {fmtRange(c.startAt, c.endAt)}
               </p>
@@ -270,74 +176,40 @@ export function ConsultationDetailPage() {
                 <Icon name="calendar_add_on" className="text-[18px]" />
                 Tambah ke Google Calendar
               </a>
-              <div className="flex flex-col gap-2">
-                {lecturer && started && (
-                  <ActionRow desc="Tulis ringkasan hasil pertemuan. Ringkasan ini masuk ke Logbook project sebagai catatan resmi bimbingan.">
+              {canWrite && (lecturer || !started) && (
+                <div className="flex flex-wrap gap-2">
+                  {lecturer && started && (
                     <Button
                       icon="task_alt"
                       onClick={() => setDialog("complete")}
                     >
                       Selesaikan & isi logbook
                     </Button>
-                  </ActionRow>
-                )}
-                {lecturer && !started && (
-                  <ActionRow desc="Pindahkan ke jam lain tanpa ajuan ulang. Undangan kalender peserta ikut berpindah.">
-                    <Button
-                      variant="outline"
-                      icon="edit_calendar"
-                      onClick={() => setDialog("reschedule")}
-                    >
-                      Jadwal ulang
-                    </Button>
-                  </ActionRow>
-                )}
-                {canWrite && !started && (
-                  <ActionRow
-                    desc={`Batalkan pertemuan yang sudah disetujui; jadwal dihapus dari kalender peserta.${lecturer ? "" : " Untuk pindah jam, batalkan lalu kirim ajuan baru."}`}
-                  >
-                    <Button
-                      variant="secondary"
-                      icon="close"
-                      onClick={() => setDialog("cancel")}
-                    >
+                  )}
+                  {lecturer && !started && (
+                    <>
+                      <Button
+                        variant="outline"
+                        icon="edit_calendar"
+                        onClick={() => setDialog("reschedule")}
+                      >
+                        Jadwal ulang
+                      </Button>
+                      <More>
+                        <MenuItem icon="close" onClick={cancel}>
+                          Batalkan bimbingan
+                        </MenuItem>
+                      </More>
+                    </>
+                  )}
+                  {!lecturer && !started && (
+                    <Button variant="secondary" icon="close" onClick={cancel}>
                       Batalkan bimbingan
                     </Button>
-                  </ActionRow>
-                )}
-              </div>
-              {lecturer && !started && (
-                <p className="text-xs text-fg-muted">
-                  “Selesaikan & isi logbook” muncul setelah jam mulai lewat.
-                </p>
+                  )}
+                </div>
               )}
             </Card>
-          )}
-
-          {c.status === "completed" && (
-            <Alert tone="success" title="Ringkasan bimbingan (logbook)">
-              {c.summary}
-            </Alert>
-          )}
-          {(c.status === "rejected" || c.status === "cancelled") && (
-            <Alert
-              tone="danger"
-              title={c.status === "rejected" ? "Ajuan ditolak" : "Dibatalkan"}
-            >
-              {c.statusReason ?? "Tanpa alasan."}
-            </Alert>
-          )}
-          {c.status === "expired" && (
-            <Alert tone="warning" title="Ajuan kedaluwarsa">
-              Tanggal yang diminta sudah lewat tanpa waktu yang disepakati.
-              Mahasiswa dapat mengajukan lagi.
-            </Alert>
-          )}
-          {c.project.trackMode === "shared" && (
-            <Alert tone="info">
-              Project shared: bimbingan ini adalah rapat tim — semua anggota
-              dapat melihatnya dan menerima email.
-            </Alert>
           )}
         </div>
 
@@ -406,22 +278,10 @@ export function ConsultationDetailPage() {
   );
 }
 
-/** An action button with one line saying what it does, so similar-looking actions are told apart. */
-const ActionRow = ({
-  desc,
-  children,
-}: {
-  desc: string;
-  children: ReactNode;
-}) => (
-  <div className="flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:gap-4">
-    <div className="shrink-0 sm:w-56 [&>button]:w-full">{children}</div>
-    <p className="text-[13px] text-fg-soft">{desc}</p>
-  </div>
-);
+const STAGES = ["Ajuan", "Disetujui", "Selesai"];
 
-/** Plain-language "what happens next" for the viewer, so the negotiation flow is never a guess. */
-function NextStep({
+/** One banner: where the consultation stands and, in one sentence, what happens next. */
+function Banner({
   c,
   lecturer,
   canWrite,
@@ -436,81 +296,103 @@ function NextStep({
 }) {
   const dosen = c.lecturer.name,
     mhs = c.student.name;
-  const [tone, text] = ((): [
+  const [tone, title, body]: [
     "info" | "warning" | "success" | "danger",
     string,
-  ] => {
-    if (!canWrite)
-      return [
-        "info",
-        `Rapat tim ini diajukan oleh ${mhs}. Hanya ${mhs} dan ${dosen} yang dapat mengubahnya; Anda tetap menerima undangan kalender lewat email.`,
-      ];
+    string?,
+  ] = (() => {
     switch (c.status) {
-      case "requested":
-        if (myTurn && !c.startAt)
-          return [
-            "warning",
-            `${mhs} meminta bimbingan pada ${fmtLongDate(c.requestedDate)}. Usulkan jam dan lokasi (boleh di tanggal lain). Setelah itu giliran mahasiswa menerima atau mengusulkan jam lain. Jika tidak bisa sama sekali, tolak dengan alasan.`,
-          ];
-        if (myTurn && started)
-          return [
-            "warning",
-            "Jam yang diusulkan sudah lewat sehingga tidak bisa diterima. Usulkan jam baru.",
-          ];
-        if (myTurn)
-          return [
-            "warning",
-            `${c.proposedBy === "lecturer" ? dosen : mhs} mengusulkan ${fmtRange(c.startAt, c.endAt)}. Terima jika cocok — bimbingan langsung disetujui dan semua peserta mendapat undangan kalender. Jika tidak cocok, usulkan jam lain${lecturer ? " atau tolak" : ""}.`,
-          ];
-        if (!c.startAt)
-          return [
-            "info",
-            `Menunggu ${dosen} mengusulkan jam untuk tanggal ${fmtLongDate(c.requestedDate)}. Anda akan menerima email saat ada usulan. Jika tanggalnya lewat tanpa usulan, pengajuan kedaluwarsa dan Anda bisa mengajukan lagi.`,
-          ];
-        return [
-          "info",
-          `Menunggu ${c.turn === "lecturer" ? dosen : mhs} menanggapi usulan Anda (${fmtRange(c.startAt, c.endAt)}): menerima atau mengusulkan jam lain. Anda akan menerima email.`,
-        ];
-      case "approved":
-        if (lecturer)
-          return started
-            ? [
-                "warning",
-                "Bimbingan sudah dimulai. Setelah selesai, tandai selesai dan tulis ringkasannya — ringkasan itu menjadi logbook.",
-              ]
-            : [
-                "success",
-                "Jadwal sudah disepakati. Anda masih bisa menjadwal ulang atau membatalkan sebelum jam mulai. Setelah bimbingan berlangsung, tandai selesai dan isi ringkasan.",
-              ];
-        return started
-          ? [
-              "info",
-              `Menunggu ${dosen} menandai bimbingan selesai dan mengisi ringkasan logbook.`,
-            ]
-          : [
-              "success",
-              `Jadwal sudah disepakati. Datang sesuai jadwal; pengingat dikirim sehari sebelumnya. Untuk memindah jadwal, batalkan lalu ajukan lagi.`,
-            ];
       case "completed":
+        return ["success", "Bimbingan selesai · ringkasan logbook", c.summary ?? ""];
+      case "rejected":
+        return ["danger", "Ajuan ditolak", c.statusReason ?? "Tanpa alasan."];
+      case "cancelled":
+        return ["danger", "Bimbingan dibatalkan", c.statusReason ?? "Tanpa alasan."];
+      case "expired":
         return [
-          "success",
-          "Bimbingan selesai. Ringkasannya tersimpan di tab Logbook project.",
-        ];
-      default:
-        return [
-          "danger",
-          lecturer
-            ? "Bimbingan ini sudah ditutup."
-            : "Bimbingan ini sudah ditutup. Ajukan bimbingan baru dari Kalender atau tab Bimbingan project.",
+          "warning",
+          "Ajuan kedaluwarsa: tanggalnya lewat tanpa jam yang disepakati",
         ];
     }
+    if (!canWrite)
+      return ["info", `Rapat tim yang diajukan ${mhs}; hanya ${mhs} dan dosen yang dapat mengubahnya`];
+    if (c.status === "requested") {
+      if (myTurn && !c.startAt)
+        return ["warning", `Usulkan jam dan lokasi untuk ${fmtLongDate(c.requestedDate)}, atau tolak bila tidak bisa`];
+      if (myTurn && started)
+        return ["warning", "Jam usulan sudah lewat: usulkan jam baru"];
+      if (myTurn)
+        return ["warning", `${c.proposedBy === "lecturer" ? dosen : mhs} mengusulkan jam: terima, atau usulkan jam lain`];
+      if (!c.startAt) return ["info", `Menunggu ${dosen} mengusulkan jam`];
+      return ["info", `Menunggu ${c.turn === "lecturer" ? dosen : mhs} menanggapi usulan jam`];
+    }
+    // approved
+    if (started)
+      return lecturer
+        ? ["warning", "Bimbingan sudah dimulai: setelah selesai, isi ringkasan logbook"]
+        : ["info", `Menunggu ${dosen} menandai selesai`];
+    return ["success", "Jadwal sudah disepakati; pengingat dikirim sehari sebelumnya"];
   })();
+  const stage =
+    c.status === "requested" ? 0 : c.status === "approved" ? 1 : c.status === "completed" ? 2 : -1;
   return (
-    <Alert tone={tone} title="Langkah berikutnya">
-      {text}
+    <Alert tone={tone} title={title}>
+      {body && <p className="whitespace-pre-line">{body}</p>}
+      {stage >= 0 && (
+        <p className="mt-1 text-xs text-fg-muted">
+          {STAGES.map((s, i) => (
+            <span key={s}>
+              {i > 0 && " › "}
+              <span className={i === stage ? "font-semibold text-fg" : ""}>{s}</span>
+            </span>
+          ))}
+        </p>
+      )}
     </Alert>
   );
 }
+
+/** Rare actions live here so the main ones stand out. */
+function More({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <Button variant="secondary" icon="more_horiz" onClick={() => setOpen(!open)}>
+        Lainnya
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            className="absolute left-0 z-20 mt-1 flex min-w-52 flex-col rounded-md border border-border bg-surface p-1 shadow-overlay"
+            onClick={() => setOpen(false)}
+          >
+            {children}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const MenuItem = ({
+  icon,
+  onClick,
+  children,
+}: {
+  icon: string;
+  onClick: () => void;
+  children: ReactNode;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-danger hover:bg-surface-muted"
+  >
+    <Icon name={icon} className="text-[18px]" />
+    {children}
+  </button>
+);
 
 function TimeDialog({
   c,
@@ -524,6 +406,7 @@ function TimeDialog({
   const me = useMe();
   const lecturer = me.role === "lecturer";
   const time = useTimeFields(
+    c.project.id,
     c.startAt
       ? c
       : {
@@ -533,11 +416,15 @@ function TimeDialog({
   );
   const [mode, setMode] = useState<Mode>(c.mode);
   const [location, setLocation] = useState(c.location ?? "");
+  // API: a lecturer proposal needs a location when none is set yet (400 LOCATION_REQUIRED)
+  const needsLocation = lecturer && !location.trim() && !c.location;
   const m = useAction(
     () =>
       api.post(`/consultations/${c.id}/${kind}`, {
         ...time.value,
-        ...(lecturer ? { mode, location: location || undefined } : {}),
+        ...(lecturer
+          ? { mode, location: location.trim() || undefined }
+          : {}),
       }),
     {
       success:
@@ -548,6 +435,7 @@ function TimeDialog({
   return (
     <Modal
       open
+      wide
       onClose={onClose}
       title={kind === "propose" ? "Usulkan waktu" : "Jadwal ulang"}
       footer={
@@ -555,15 +443,19 @@ function TimeDialog({
           <Button variant="secondary" onClick={onClose}>
             Batal
           </Button>
-          <Button loading={m.isPending} onClick={() => m.mutate()}>
+          <Button
+            loading={m.isPending}
+            disabled={!!time.error || needsLocation}
+            onClick={() => m.mutate()}
+          >
             Kirim
           </Button>
         </>
       }
     >
       <p className="text-fg-muted">
-        Durasi 15 menit–4 jam, mulai minimal 1 jam dari sekarang, tidak pada
-        tanggal dosen berhalangan. Boleh di tanggal lain dari yang diminta.
+        Pilih tanggal dari kalender (hari berhalangan dosen dicoret). Boleh di
+        tanggal lain dari yang diminta.
       </p>
       {time.fields}
       {lecturer ? (
@@ -591,11 +483,15 @@ function AcceptDialog({
 }) {
   const me = useMe();
   const [location, setLocation] = useState(c.location ?? "");
+  const place = location.trim();
   const m = useAction(
     () =>
       api.post(
         `/consultations/${c.id}/accept`,
-        me.role === "lecturer" && location !== c.location ? { location } : {},
+        // only the lecturer may send a location, and never an empty one (400)
+        me.role === "lecturer" && place && place !== c.location
+          ? { location: place }
+          : {},
       ),
     { success: "Bimbingan disetujui", onDone: onClose },
   );
@@ -609,7 +505,11 @@ function AcceptDialog({
           <Button variant="secondary" onClick={onClose}>
             Batal
           </Button>
-          <Button loading={m.isPending} onClick={() => m.mutate()}>
+          <Button
+            loading={m.isPending}
+            disabled={me.role === "lecturer" && !place && !c.location}
+            onClick={() => m.mutate()}
+          >
             Terima
           </Button>
         </>
@@ -629,9 +529,6 @@ function AcceptDialog({
       ) : (
         <p className="text-fg-muted">{c.location}</p>
       )}
-      <p className="text-xs text-fg-muted">
-        Semua peserta menerima undangan kalender (.ics) lewat email (E3).
-      </p>
     </Modal>
   );
 }

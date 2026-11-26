@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, ApiError, setSessionEndHandler } from "./api";
 import type { Profile } from "./types";
 
 interface Auth {
@@ -20,16 +20,38 @@ export const useAuth = () => useContext(Ctx);
 /** For pages that only render behind ProtectedRoute. */
 export const useMe = () => useContext(Ctx).user!;
 
+// app boot: refresh → me. Memoised so StrictMode's double effect (dev) makes one round, not two.
+// Only "unreachable" errors are retried; they never rotate the token.
+let booting: Promise<Profile> | null = null;
+const unreachable = (e: unknown) =>
+  e instanceof ApiError && [0, 429, 502, 503, 504].includes(e.status);
+const bootSession = () =>
+  (booting ??= (async () => {
+    for (let tries = 0; ; tries++) {
+      try {
+        await api.post("/auth/refresh");
+        return await api.get<Profile>("/auth/me");
+      } catch (e) {
+        if (tries >= 2 || !unreachable(e)) throw e;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+  })());
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [user, setUser] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // app boot: refresh → me
-    api
-      .post("/auth/refresh")
-      .then(() => api.get<Profile>("/auth/me"))
+    setSessionEndHandler(() => {
+      setUser(null);
+      qc.clear();
+    });
+  }, [qc]);
+
+  useEffect(() => {
+    bootSession()
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setReady(true));

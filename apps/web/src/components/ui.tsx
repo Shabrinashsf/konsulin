@@ -1,6 +1,7 @@
 // Components styled after tracer-study-web (its real mids.css / mids.light.css).
 import {
   createContext,
+  Fragment,
   useCallback,
   useContext,
   useEffect,
@@ -381,36 +382,6 @@ export function Tabs<T extends string>({
   );
 }
 
-// ---------- Track (.tracks .track-item) ----------
-const trackColor = {
-  pending: "text-fg-faint",
-  active: "text-primary",
-  done: "text-fg-muted",
-  rejected: "text-danger",
-};
-export const Track = ({
-  steps,
-}: {
-  steps: { title: string; subtitle: string; state: keyof typeof trackColor }[];
-}) => (
-  <div className="flex">
-    {steps.map((s, i) => (
-      <div
-        key={s.title}
-        className={cx(
-          "relative mt-2 min-w-0 flex-1 border-t-2 border-dashed pt-4 pr-2",
-          i === steps.length - 1 ? "border-transparent" : "border-border",
-          trackColor[s.state],
-        )}
-      >
-        <span className="absolute -top-[7px] left-0 size-3 rounded-full bg-current" />
-        <p className="font-medium">{s.title}</p>
-        <p className="mt-0.5 truncate text-[13px]">{s.subtitle}</p>
-      </div>
-    ))}
-  </div>
-);
-
 // ---------- Modal (.modal-content.bd-0) ----------
 export function Modal({
   open,
@@ -599,55 +570,92 @@ export const Avatar = ({
       .toUpperCase()}
   </span>
 );
-/** DataTables-style pagination. */
+/** Pagination: range text, optional page-size select, ‹ 1 … 4 5 6 … 20 ›. */
 export function Pager({
   meta,
   onPage,
+  limit,
+  onLimit,
+  sizes = [10, 20, 50, 100],
 }: {
-  meta?: { page: number; totalPages: number; total: number };
+  meta?: { page: number; limit?: number; totalPages: number; total: number };
   onPage: (p: number) => void;
+  /** With onLimit, shows "Tampilkan N data"; the caller resets to page 1. */
+  limit?: number;
+  onLimit?: (n: number) => void;
+  sizes?: number[];
 }) {
-  if (!meta || meta.totalPages <= 1) return null;
+  // one page still shows the footer (total + disabled controls); only an empty list hides it
+  if (!meta || meta.total === 0) return null;
+  const { page, totalPages, total } = meta;
+  const size = limit ?? meta.limit ?? total;
+  const from = (page - 1) * size + 1;
+  const to = Math.min(page * size, total);
+  const pages = [
+    ...new Set([1, page - 1, page, page + 1, totalPages]),
+  ].filter((n) => n >= 1 && n <= totalPages).sort((x, y) => x - y);
+  const nav = (icon: string, label: string, target: number, off: boolean) => (
+    <IconButton
+      icon={icon}
+      label={label}
+      size="sm"
+      variant="secondary"
+      disabled={off}
+      onClick={() => onPage(target)}
+    />
+  );
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 px-2 pt-3">
-      <span className="mr-auto text-[13px] text-fg-muted">
-        Halaman {meta.page} dari {meta.totalPages} · {meta.total} data
-      </span>
-      <IconButton
-        icon="keyboard_double_arrow_left"
-        label="Pertama"
-        size="sm"
-        variant="secondary"
-        disabled={meta.page <= 1}
-        onClick={() => onPage(1)}
-      />
-      <IconButton
-        icon="chevron_backward"
-        label="Sebelumnya"
-        size="sm"
-        variant="secondary"
-        disabled={meta.page <= 1}
-        onClick={() => onPage(meta.page - 1)}
-      />
-      <span className="flex size-10 items-center justify-center rounded-md bg-primary font-medium text-fg-inverse">
-        {meta.page}
-      </span>
-      <IconButton
-        icon="chevron_forward"
-        label="Berikutnya"
-        size="sm"
-        variant="secondary"
-        disabled={meta.page >= meta.totalPages}
-        onClick={() => onPage(meta.page + 1)}
-      />
-      <IconButton
-        icon="keyboard_double_arrow_right"
-        label="Terakhir"
-        size="sm"
-        variant="secondary"
-        disabled={meta.page >= meta.totalPages}
-        onClick={() => onPage(meta.totalPages)}
-      />
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-2 pt-3">
+      <div className="mr-auto flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-fg-muted">
+        {onLimit && (
+          <label className="flex items-center gap-2">
+            Tampilkan
+            <Select
+              className="h-10! w-auto min-w-[76px] py-0"
+              value={limit}
+              onChange={(e) => onLimit(Number(e.target.value))}
+            >
+              {sizes.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+            data
+          </label>
+        )}
+        <span>
+          {from}–{to} dari {total} data
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        {nav("chevron_backward", "Sebelumnya", page - 1, page <= 1)}
+        {pages.map((n, i) => (
+          <Fragment key={n}>
+            {i > 0 && n - pages[i - 1] > 1 && (
+              <span className="px-1 text-fg-muted">…</span>
+            )}
+            {n === page ? (
+              <span className="flex size-10 items-center justify-center rounded-md bg-primary font-medium text-fg-inverse">
+                {n}
+              </span>
+            ) : (
+              <button
+                type="button"
+                aria-label={`Halaman ${n}`}
+                onClick={() => onPage(n)}
+                className={cx(
+                  "inline-flex size-10 items-center justify-center rounded-md border font-medium transition",
+                  btnStyle.secondary,
+                )}
+              >
+                {n}
+              </button>
+            )}
+          </Fragment>
+        ))}
+        {nav("chevron_forward", "Berikutnya", page + 1, page >= totalPages)}
+      </div>
     </div>
   );
 }

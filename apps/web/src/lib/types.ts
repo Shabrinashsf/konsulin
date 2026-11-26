@@ -253,20 +253,10 @@ export interface MonitoredStudent {
   } | null;
 }
 
-/** Demo-only: the emails (E1–E11) the notification module would send. */
-export interface SentEmail {
-  id: string;
-  code: string;
-  to: string;
-  subject: string;
-  ics: "REQUEST" | "CANCEL" | null;
-  createdAt: string;
-}
-
 export interface ApiErrorBody {
   statusCode: number;
   error: string;
-  message: string;
+  message: string | string[];
   code?: string;
   details?: unknown;
 }

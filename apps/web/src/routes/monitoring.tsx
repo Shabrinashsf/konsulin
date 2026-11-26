@@ -1,9 +1,11 @@
-// US-09 (lecturer): GET /monitoring/students. Demo-only: the email outbox (notification module).
+// US-09 (lecturer): GET /monitoring/students.
 import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  Alert,
   Avatar,
   Badge,
+  Button,
   Card,
   Empty,
   Icon,
@@ -14,20 +16,39 @@ import {
   Select,
   Table,
 } from "../components/ui";
-import { api } from "../lib/api";
-import { useMe } from "../lib/auth";
+import { api, errorMessage } from "../lib/api";
 import { fmtDate, fmtDateTime } from "../lib/time";
 import type {
   MonitoredStudent,
   Project,
-  SentEmail,
   StudyProgram,
 } from "../lib/types";
 import { TYPES } from "./projects";
 
+// MonitoringQueryDto rejects unknown parameters (400), so only these leave the URL for the API
+const PARAMS = [
+  "q",
+  "projectId",
+  "projectType",
+  "studyProgramId",
+  "degree",
+  "cohortYear",
+  "hasOpenRevisions",
+  "overdue",
+  "noConsultationSince",
+  "sort",
+  "order",
+  "page",
+  "limit",
+];
+// a number column reads best "most first"; empty values stay last either way (API)
+const DESC_FIRST = ["openRevisions"];
+
 export function MonitoringPage() {
   const [sp, setSp] = useSearchParams();
-  const q = Object.fromEntries(sp);
+  const q = Object.fromEntries(
+    [...sp].filter(([k]) => PARAMS.includes(k)),
+  ) as Record<string, string>;
   const set = (k: string, v: string) => {
     const n = new URLSearchParams(sp);
     v ? n.set(k, v) : n.delete(k);
@@ -41,7 +62,7 @@ export function MonitoringPage() {
   });
   const projects = useQuery({
     queryKey: ["projects", "list", "all"],
-    queryFn: () => api.list<Project>("/projects", { limit: 100 }),
+    queryFn: () => api.listAll<Project>("/projects"),
   });
   const programs = useQuery({
     queryKey: ["study-programs"],
@@ -52,8 +73,19 @@ export function MonitoringPage() {
       className="inline-flex items-center gap-0.5"
       onClick={() => {
         const n = new URLSearchParams(sp);
+        const current = q.order ?? "asc";
         n.set("sort", key);
-        n.set("order", q.sort === key && q.order !== "desc" ? "desc" : "asc");
+        n.set(
+          "order",
+          q.sort === key
+            ? current === "desc"
+              ? "asc"
+              : "desc"
+            : DESC_FIRST.includes(key)
+              ? "desc"
+              : "asc",
+        );
+        n.delete("page");
         setSp(n, { replace: true });
       }}
     >
@@ -69,10 +101,7 @@ export function MonitoringPage() {
   const year = new Date().getFullYear();
   return (
     <>
-      <PageHeader
-        title="Monitoring mahasiswa"
-        subtitle="Semua mahasiswa bimbingan Anda lintas project."
-      />
+      <PageHeader title="Monitoring mahasiswa" />
       <Card className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>input]:w-full [&>select]:w-full">
         <Input
           placeholder="Cari nama atau NRP"
@@ -131,11 +160,18 @@ export function MonitoringPage() {
           ))}
         </Select>
         <Select
-          value={q.hasOpenRevisions ?? q.overdue ?? ""}
+          value={
+            q.hasOpenRevisions
+              ? `hasOpenRevisions=${q.hasOpenRevisions}`
+              : q.overdue
+                ? `overdue=${q.overdue}`
+                : ""
+          }
           onChange={(e) => {
             const n = new URLSearchParams(sp);
             n.delete("hasOpenRevisions");
             n.delete("overdue");
+            n.delete("page");
             const [k, v] = e.target.value.split("=");
             if (k) n.set(k, v);
             setSp(n, { replace: true });
@@ -159,6 +195,15 @@ export function MonitoringPage() {
       <Card className="p-2">
         {list.isLoading ? (
           <Loading />
+        ) : list.error ? (
+          <div className="flex flex-col items-start gap-3 p-3">
+            <Alert tone="danger" title="Data monitoring gagal dimuat">
+              {errorMessage(list.error)}
+            </Alert>
+            <Button variant="secondary" onClick={() => setSp({})}>
+              Reset filter
+            </Button>
+          </div>
         ) : !list.data?.data.length ? (
           <Empty icon="monitoring" title="Tidak ada mahasiswa yang cocok" />
         ) : (
@@ -244,80 +289,19 @@ export function MonitoringPage() {
         )}
         <Pager
           meta={list.data?.meta}
+          limit={Number(q.limit ?? 10)}
+          onLimit={(n) => {
+            const next = new URLSearchParams(sp);
+            next.set("limit", String(n));
+            next.delete("page");
+            setSp(next, { replace: true });
+          }}
           onPage={(p) => {
             const n = new URLSearchParams(sp);
             n.set("page", String(p));
             setSp(n);
           }}
         />
-      </Card>
-    </>
-  );
-}
-
-const EMAIL: Record<string, string> = {
-  E1: "Undangan project",
-  E2: "Pengajuan bimbingan",
-  E3: "Bimbingan disetujui",
-  E4: "Pengajuan ditolak",
-  E5: "Bimbingan dijadwalkan",
-  E6: "Jadwal ulang",
-  E7: "Pembatalan",
-  E8: "Pengingat H-1",
-  E9: "Versi baru",
-  E10: "Feedback baru",
-  E11: "Usulan waktu",
-};
-export function EmailPage() {
-  const me = useMe();
-  const list = useQuery({
-    queryKey: ["emails"],
-    queryFn: () => api.list<SentEmail>("/demo/emails", { limit: 100 }),
-  });
-  return (
-    <>
-      <PageHeader
-        title={me.role === "lecturer" ? "Email terkirim" : "Email masuk"}
-        subtitle="Mode demo: email yang akan dikirim modul notifikasi (E1–E11) ke akun ini. Di produksi email dikirim lewat SMTP."
-      />
-      <Card className="p-2">
-        {list.isLoading ? (
-          <Loading />
-        ) : !list.data?.data.length ? (
-          <Empty icon="mail" title="Belum ada email">
-            Lakukan aksi seperti mengundang, mengajukan bimbingan, atau
-            mengunggah versi.
-          </Empty>
-        ) : (
-          <div className="divide-y divide-border">
-            {list.data.data.map((e) => (
-              <div
-                key={e.id}
-                className="flex flex-wrap items-center gap-3 px-3 py-3"
-              >
-                <Badge tone="navy">{e.code}</Badge>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{e.subject}</p>
-                  <p className="text-xs text-fg-muted">
-                    {EMAIL[e.code]} · ke {e.to}
-                  </p>
-                </div>
-                {e.ics && (
-                  <Badge
-                    tone={e.ics === "CANCEL" ? "danger" : "success"}
-                    icon="event"
-                  >
-                    .ics {e.ics}
-                  </Badge>
-                )}
-                <span className="text-xs text-fg-muted">
-                  {fmtDateTime(e.createdAt)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <Pager meta={list.data?.meta} onPage={() => {}} />
       </Card>
     </>
   );

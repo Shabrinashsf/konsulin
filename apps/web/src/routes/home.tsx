@@ -7,7 +7,6 @@ import {
   Card,
   Empty,
   Icon,
-  IconBox,
   Loading,
   PageHeader,
   type Tone,
@@ -39,31 +38,28 @@ export function HomePage() {
   const today = todayWIB();
   const projects = useQuery({
     queryKey: ["projects", "list", "all"],
-    queryFn: () => api.list<Project>("/projects", { limit: 100 }),
+    queryFn: () => api.listAll<Project>("/projects"),
   });
   const negotiating = useQuery({
     queryKey: ["consultations", "mine", "requested"],
     queryFn: () =>
-      api.list<Consultation>("/consultations", {
+      api.listAll<Consultation>("/consultations", {
         status: "requested",
-        limit: 100,
       }),
   });
   const approved = useQuery({
     queryKey: ["consultations", "mine", "approved"],
     queryFn: () =>
-      api.list<Consultation>("/consultations", {
+      api.listAll<Consultation>("/consultations", {
         status: "approved",
-        limit: 100,
       }),
   });
   const week = useQuery({
     queryKey: ["consultations", "mine", "week", today],
     queryFn: () =>
-      api.list<Consultation>("/consultations", {
+      api.listAll<Consultation>("/consultations", {
         from: today,
         to: addDays(today, 7),
-        limit: 100,
       }),
   });
   const invites = useQuery({
@@ -80,9 +76,8 @@ export function HomePage() {
         queryKey: ["revision-items", p.id, status, "home"],
         queryFn: () =>
           api
-            .list<RevisionItemContext>(`/projects/${p.id}/revision-items`, {
+            .listAll<RevisionItemContext>(`/projects/${p.id}/revision-items`, {
               status,
-              limit: 100,
             })
             .then((r) => r.data.map((i) => ({ ...i, project: p }))),
       })),
@@ -154,70 +149,9 @@ export function HomePage() {
     (c) => c.status === "approved" || c.status === "requested",
   );
 
-  const shortcuts = lecturer
-    ? [
-        {
-          to: "/kalender",
-          icon: "calendar_month",
-          title: "Kalender Bimbingan",
-          desc: "Timeline semua bimbingan lintas project",
-        },
-        {
-          to: "/projects",
-          icon: "folder_shared",
-          title: "Project Bimbingan",
-          desc: `${projects.data?.meta.total ?? 0} project aktif`,
-        },
-        {
-          to: "/monitoring",
-          icon: "monitoring",
-          title: "Monitoring",
-          desc: "Progres semua mahasiswa bimbingan",
-        },
-      ]
-    : [
-        {
-          to: "/kalender",
-          icon: "calendar_month",
-          title: "Kalender Bimbingan",
-          desc: "Jadwal bimbingan Anda di semua project",
-        },
-        {
-          to: "/projects",
-          icon: "folder_shared",
-          title: "Project Saya",
-          desc: `${projects.data?.meta.total ?? 0} project diikuti`,
-        },
-        {
-          to: "/undangan",
-          icon: "mail",
-          title: "Undangan",
-          desc: invites.data?.meta.total
-            ? `${invites.data.meta.total} undangan menunggu jawaban`
-            : "Tidak ada undangan baru",
-        },
-      ];
-
   return (
     <>
       <PageHeader title="Beranda" />
-      <div className="mb-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {shortcuts.map((s) => (
-          <Link
-            key={s.to}
-            to={s.to}
-            className="card flex flex-col gap-3 p-5 transition hover:-translate-y-0.5"
-          >
-            <IconBox icon={s.icon} />
-            <div>
-              <p className="text-[15px] font-medium">{s.title}</p>
-              <p className="mt-0.5 truncate text-[13px] text-fg-muted">
-                {s.desc}
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         <Card className="p-2">

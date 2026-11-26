@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, Outlet, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, RouterProvider } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 import { ApiError } from "./lib/api";
@@ -16,7 +16,7 @@ import { ConsultationDetailPage } from "./routes/consultation-detail";
 import { FolderDetailPage } from "./routes/folder-detail";
 import { InvitationsPage } from "./routes/invitations";
 import { SchedulePage } from "./routes/schedule";
-import { EmailPage, MonitoringPage } from "./routes/monitoring";
+import { MonitoringPage } from "./routes/monitoring";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,7 +50,8 @@ const router = createBrowserRouter([
           { path: "projects/:projectId", element: <ProjectDetailPage /> },
           { path: "consultations/:id", element: <ConsultationDetailPage /> },
           { path: "folders/:folderId", element: <FolderDetailPage /> },
-          { path: "email", element: <EmailPage /> },
+          // the E1 email button points at /invitations (notification templates)
+          { path: "invitations", element: <Navigate to="/undangan" replace /> },
           {
             element: <RoleRoute role="student" />,
             children: [{ path: "undangan", element: <InvitationsPage /> }],

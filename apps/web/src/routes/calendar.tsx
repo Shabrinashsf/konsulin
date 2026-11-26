@@ -83,12 +83,6 @@ const weekdayName = new Intl.DateTimeFormat("id-ID", {
   weekday: "long",
   timeZone: "UTC",
 });
-const shortDay = new Intl.DateTimeFormat("id-ID", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  timeZone: "UTC",
-});
 const utc = (d: string) => new Date(`${d}T00:00:00Z`);
 const timeOf = (c: Consultation) => (c.startAt ? wibTime(c.startAt) : null);
 const byTime = (a: Consultation, b: Consultation) =>
@@ -127,12 +121,11 @@ export function CalendarPage() {
   const list = useQuery({
     queryKey: ["consultations", "calendar", from, projectId, status],
     queryFn: () =>
-      api.list<Consultation>("/consultations", {
+      api.listAll<Consultation>("/consultations", {
         from,
         to,
         projectId,
         status,
-        limit: 100,
       }),
     placeholderData: keepPreviousData,
   });
@@ -144,7 +137,7 @@ export function CalendarPage() {
   });
   const projects = useQuery({
     queryKey: ["projects", "list", "all"],
-    queryFn: () => api.list<Project>("/projects", { limit: 100 }),
+    queryFn: () => api.listAll<Project>("/projects"),
   });
 
   const all = [...(list.data?.data ?? [])].sort(byTime);
@@ -157,12 +150,7 @@ export function CalendarPage() {
   const blocked = new Map(
     (blackouts.data?.data ?? []).map((b) => [b.date, b.reason]),
   );
-  const inMonth = all.filter((c) => consultationDate(c).startsWith(month));
   const waiting = all.filter((c) => needsMe(c, me)).length;
-  const next = all.find(
-    (c) =>
-      c.status === "approved" && c.startAt && new Date(c.startAt) > new Date(),
-  );
 
   return (
     <>
@@ -176,41 +164,7 @@ export function CalendarPage() {
             {lecturer ? "Jadwalkan bimbingan" : "Ajukan bimbingan"}
           </Button>
         }
-        subtitle={
-          lecturer
-            ? "Semua bimbingan dari seluruh project Anda."
-            : "Bimbingan Anda di semua project, termasuk rapat tim project shared."
-        }
       />
-
-      {/* Summary strip */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <Stat
-          icon="event"
-          label={`Bimbingan ${monthName.format(utc(first)).split(" ")[0]}`}
-          value={String(
-            inMonth.filter(
-              (c) => c.status !== "cancelled" && c.status !== "rejected",
-            ).length,
-          )}
-        />
-        <Stat
-          icon="touch_app"
-          label="Perlu respons Anda"
-          value={String(waiting)}
-          tone={waiting ? "text-warning" : undefined}
-        />
-        <Stat
-          icon="schedule"
-          label="Berikutnya"
-          value={
-            next
-              ? `${shortDay.format(utc(consultationDate(next)))}, ${timeOf(next)}`
-              : "-"
-          }
-          hint={next?.topic}
-        />
-      </div>
 
       <Card className="p-0">
         {/* Toolbar */}
@@ -242,6 +196,11 @@ export function CalendarPage() {
           >
             Hari ini
           </Button>
+          {waiting > 0 && (
+            <Badge tone="warning" icon="touch_app">
+              {waiting} perlu respons Anda
+            </Badge>
+          )}
           <div className="flex-1" />
           <div
             className="flex rounded-md bg-surface-muted p-1"
@@ -400,35 +359,6 @@ export function CalendarPage() {
         />
       )}
     </>
-  );
-}
-
-function Stat({
-  icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: string;
-}) {
-  return (
-    <div className="card flex items-center gap-3 p-4">
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary-soft">
-        <Icon name={icon} fill className="text-[24px] text-primary" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs text-fg-muted">{label}</p>
-        <p className={`truncate text-[17px] font-semibold ${tone ?? ""}`}>
-          {value}
-        </p>
-        {hint && <p className="truncate text-xs text-fg-muted">{hint}</p>}
-      </div>
-    </div>
   );
 }
 
