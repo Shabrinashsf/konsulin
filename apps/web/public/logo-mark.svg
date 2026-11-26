@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Konsulin">
+  <rect width="64" height="64" rx="14" fill="#008FFF"/>
+  <rect x="13" y="16" width="38" height="36" rx="6" fill="#fff"/>
+  <path d="M19 16H45A6 6 0 0 1 51 22V27H13V22A6 6 0 0 1 19 16Z" fill="#013880"/>
+  <rect x="21" y="10" width="5" height="11" rx="2.5" fill="#FFBD07"/>
+  <rect x="38" y="10" width="5" height="11" rx="2.5" fill="#FFBD07"/>
+  <path d="M24.5 39L29.5 44L39.5 34" fill="none" stroke="#008FFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -11,17 +11,46 @@ import {
   useToast,
 } from "../components/ui";
 import { Logo } from "../components/layout";
+import { AuthHero } from "./auth-hero";
 import { useAuth } from "../lib/auth";
 import { api, errorMessage } from "../lib/api";
 import type { StudyProgram } from "../lib/types";
 
-function AuthLayout({ children }: { children: ReactNode }) {
+function AuthLayout({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="card w-full max-w-md p-8">
-        <Logo />
-        {children}
-      </div>
+    <div className="grid min-h-screen lg:h-screen lg:grid-cols-[1.25fr_1fr] lg:overflow-hidden">
+      <aside className="relative hidden overflow-hidden bg-navy px-12 py-10 text-white lg:flex lg:flex-col xl:px-16">
+        <div className="pointer-events-none absolute -top-40 -right-40 size-[520px] rounded-full bg-primary opacity-40 blur-[120px]" />
+        <div className="pointer-events-none absolute -bottom-48 -left-32 size-[420px] rounded-full bg-accent opacity-15 blur-[120px]" />
+        <div className="relative mb-6">
+          <Logo inverse large />
+        </div>
+        <AuthHero />
+        <p className="relative text-[13px] text-white/50">
+          © {new Date().getFullYear()} Konsulin
+        </p>
+      </aside>
+
+      <main className="flex flex-col bg-white px-5 py-6 sm:px-10 lg:overflow-y-auto">
+        <div className="lg:hidden">
+          <Logo large />
+        </div>
+        <div className="mx-auto my-auto w-full max-w-sm py-6">
+          <h1 className="text-[28px] leading-tight font-bold tracking-tight text-fg">
+            {title}
+          </h1>
+          <p className="mt-1.5 mb-5 text-fg-muted">{subtitle}</p>
+          {children}
+        </div>
+      </main>
     </div>
   );
 }
@@ -43,12 +72,11 @@ export function LoginPage() {
     m.mutate();
   };
   return (
-    <AuthLayout>
-      <h1 className="mt-6 text-title-page font-medium">Masuk</h1>
-      <p className="mb-5 text-fg-muted">
-        Bimbingan akademik dalam satu tempat.
-      </p>
-      <form onSubmit={submit} className="flex flex-col gap-4">
+    <AuthLayout
+      title="Selamat datang kembali"
+      subtitle="Masuk untuk melanjutkan bimbingan Anda."
+    >
+      <form onSubmit={submit} className="flex flex-col gap-3">
         {m.error && <Alert tone="danger">{errorMessage(m.error)}</Alert>}
         <Field label="Email" required>
           <Input
@@ -112,15 +140,16 @@ export function RegisterPage() {
   });
   const year = new Date().getFullYear();
   return (
-    <AuthLayout>
-      <h1 className="mt-6 text-title-page font-medium">Daftar mahasiswa</h1>
-      <p className="mb-5 text-fg-muted">Akun dosen dibuat oleh admin.</p>
+    <AuthLayout
+      title="Buat akun mahasiswa"
+      subtitle="Akun dosen dibuat oleh admin, tidak perlu mendaftar."
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
           m.mutate();
         }}
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
       >
         {m.error && <Alert tone="danger">{errorMessage(m.error)}</Alert>}
         <Field label="Nama lengkap" required>
@@ -132,54 +161,16 @@ export function RegisterPage() {
             required
           />
         </Field>
-        <Field label="NRP" hint="10 digit angka" required>
-          <Input
-            value={f.nrp}
-            onChange={set("nrp")}
-            inputMode="numeric"
-            pattern="\d{10}"
-            required
-          />
-        </Field>
-        <Field label="Email" required>
-          <Input
-            type="email"
-            value={f.email}
-            onChange={set("email")}
-            required
-          />
-        </Field>
-        <Field
-          label="Password"
-          hint="Minimal 8 karakter, ada huruf besar, huruf kecil, dan angka"
-          required
-        >
-          <Input
-            type="password"
-            value={f.password}
-            onChange={set("password")}
-            minLength={8}
-            required
-          />
-        </Field>
-        <div className="grid grid-cols-[1fr_120px] gap-3">
-          <Field
-            label="Program studi"
-            hint="Tidak dapat diubah setelah daftar"
-            required
-          >
-            <Select
-              value={f.studyProgramId}
-              onChange={set("studyProgramId")}
+        <div className="grid grid-cols-[1fr_110px] gap-3">
+          <Field label="NRP" required>
+            <Input
+              value={f.nrp}
+              onChange={set("nrp")}
+              inputMode="numeric"
+              pattern="\d{10}"
+              placeholder="10 digit angka"
               required
-            >
-              <option value="">Pilih program studi</option>
-              {programs.data?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
+            />
           </Field>
           <Field label="Angkatan" required>
             <Select value={f.cohortYear} onChange={set("cohortYear")}>
@@ -191,6 +182,42 @@ export function RegisterPage() {
             </Select>
           </Field>
         </div>
+        <Field label="Email" required>
+          <Input
+            type="email"
+            value={f.email}
+            onChange={set("email")}
+            required
+          />
+        </Field>
+        <Field label="Password" required>
+          <Input
+            type="password"
+            value={f.password}
+            onChange={set("password")}
+            minLength={8}
+            placeholder="Min. 8 karakter, huruf besar, kecil, angka"
+            required
+          />
+        </Field>
+        <Field
+          label="Program studi"
+          hint="Tidak dapat diubah setelah daftar"
+          required
+        >
+          <Select
+            value={f.studyProgramId}
+            onChange={set("studyProgramId")}
+            required
+          >
+            <option value="">Pilih program studi</option>
+            {programs.data?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Button type="submit" loading={m.isPending} size="lg">
           Daftar
         </Button>

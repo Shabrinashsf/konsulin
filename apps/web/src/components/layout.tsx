@@ -1,5 +1,5 @@
 // tracer-study-web shell: fixed 60px top bar (logo, page title, user pill), 240px white sidebar.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, HeaderSlot, Icon, Loading } from "./ui";
@@ -23,13 +23,28 @@ const MENU = {
   ],
 } as const;
 
-export function Logo() {
+export function Logo({
+  inverse,
+  large,
+}: {
+  inverse?: boolean;
+  large?: boolean;
+}) {
   return (
-    <span className="flex items-center gap-1.5">
-      <span className="flex size-7 items-center justify-center rounded-md bg-navy text-base font-bold text-accent">
-        K
+    <span className={`flex items-center ${large ? "gap-3" : "gap-2"}`}>
+      <img
+        src="/logo-mark.svg"
+        alt=""
+        className={large ? "size-12" : "size-7"}
+      />
+      <span
+        className={`${large ? "text-[32px]" : "text-[19px]"} font-bold tracking-tight ${inverse ? "text-white" : "text-navy"}`}
+      >
+        Konsul
+        <span className={inverse ? "text-primary-line" : "text-primary"}>
+          in
+        </span>
       </span>
-      <span className="text-[19px] font-medium text-fg">Konsulin</span>
     </span>
   );
 }
@@ -84,7 +99,22 @@ export function AppShell() {
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const loc = useLocation();
+  // close the profile menu on outside click or Escape
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
   const pending = useQuery({
     queryKey: ["invitations", "me", "pending"],
     queryFn: () =>
@@ -137,45 +167,42 @@ export function AppShell() {
           </NavLink>
         </div>
         <div ref={setSlot} className="min-w-0 flex-1 px-2 lg:px-[25px]" />
-        <div className="relative mr-5 shrink-0">
+        <div ref={menuRef} className="relative mr-3 shrink-0 sm:mr-5">
           <button
             onClick={() => setMenu((m) => !m)}
-            className="flex items-center gap-1 rounded-full py-0.5 pr-1.5 pl-1.5 transition hover:bg-surface-muted"
+            aria-expanded={menu}
+            className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 transition hover:bg-surface-muted"
           >
-            <span className="mx-1 hidden max-w-[140px] truncate text-[13px] font-medium sm:block">
+            <Avatar name={user.name} className="size-8" />
+            <span className="hidden max-w-[200px] truncate text-[13px] font-medium sm:block">
               {user.name}
             </span>
-            <Avatar name={user.name} />
           </button>
           {menu && (
             <div
-              className="absolute right-0 z-30 mt-2 w-[300px] rounded-xl bg-surface p-2.5 shadow-overlay"
-              onMouseLeave={() => setMenu(false)}
+              role="menu"
+              className="absolute right-0 z-30 mt-2 w-[280px] max-w-[calc(100vw-24px)] rounded-xl border border-border bg-surface shadow-overlay"
             >
-              <div className="flex flex-col items-center gap-3 py-[15px] text-center">
-                <Avatar name={user.name} className="size-16 text-lg" />
-                <div className="flex flex-col">
-                  <span className="text-[15px] font-semibold">{user.name}</span>
-                  <span>
-                    {user.role === "lecturer"
-                      ? "Dosen"
-                      : `Mahasiswa · ${user.nrp}`}
-                  </span>
-                  <span className="text-[13px] text-fg-muted">
-                    {user.email}
-                  </span>
-                  {user.studyProgram && (
-                    <span className="text-[13px] text-fg-muted">
-                      {user.studyProgram.name} · {user.cohortYear}
-                    </span>
-                  )}
-                </div>
+              <div className="px-4 py-3.5">
+                <p className="font-semibold">{user.name}</p>
+                <p className="mt-0.5 text-[13px] text-fg-soft">
+                  {user.role === "lecturer"
+                    ? "Dosen"
+                    : `Mahasiswa · ${user.nrp}`}
+                </p>
+                <p className="text-[13px] text-fg-muted">{user.email}</p>
+                {user.studyProgram && (
+                  <p className="text-[13px] text-fg-muted">
+                    {user.studyProgram.name} · {user.cohortYear}
+                  </p>
+                )}
               </div>
               <button
-                className="flex w-full items-center gap-2 rounded-md px-3 py-[15px] font-medium text-danger hover:bg-surface-muted"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-b-xl border-t border-border px-4 py-3 text-danger hover:bg-surface-muted"
                 onClick={() => logout()}
               >
-                <Icon name="logout" /> Keluar
+                <Icon name="logout" className="text-[20px]" /> Keluar
               </button>
             </div>
           )}
