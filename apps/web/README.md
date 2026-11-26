@@ -12,22 +12,18 @@ The API's `FRONTEND_ORIGIN` must be this app's address: CORS and every email but
 
 ## Pages
 
-| Path                     | Who      | Page                                                                                   |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------- |
-| `/login`, `/register`    | all      | sign in; students register themselves (lecturers are created in the database)          |
-| `/`                      | all      | Beranda: "Perlu tindakan Anda" across projects and the next 7 days                     |
-| `/kalender`              | all      | Kalender Bimbingan: month and agenda view of every consultation                        |
-| `/projects`              | all      | project list                                                                           |
-| `/projects/:id?tab=…`     | all      | project detail, tabs `bimbingan` · `submission` · `logbook` · `anggota`                |
-| `/consultations/:id`     | all      | one consultation: status banner, negotiation, approve, reschedule, complete            |
-| `/folders/:id?versi=…`   | all      | one folder: versions, feedback and revision checklist per version                      |
-| `/undangan`              | student  | invitations to accept or decline                                                       |
-| `/jadwal`                | lecturer | Hari Berhalangan (blackout dates)                                                      |
-| `/monitoring`            | lecturer | every supervised student with meetings, open revisions and deadlines                   |
-
-Project tabs: **Submission** holds the folders plus the "Perlu tindakan Anda" / "Menunggu review Anda" revision
-list; **Anggota** holds members and, for the lecturer, invitations. Old links `?tab=revisi` and `?tab=undangan` land on
-those tabs, and `/invitations` (the button in invitation emails) redirects to `/undangan`.
+| Path                   | Who      | Page                                                                          |
+| ---------------------- | -------- | ----------------------------------------------------------------------------- |
+| `/login`, `/register`  | all      | sign in; students register themselves (lecturers are created in the database) |
+| `/`                    | all      | Beranda: "Perlu tindakan Anda" across projects and the next 7 days            |
+| `/kalender`            | all      | Kalender Bimbingan: month and agenda view of every consultation               |
+| `/projects`            | all      | project list                                                                  |
+| `/projects/:id?tab=…`  | all      | project detail, tabs `bimbingan` · `submission` · `logbook` · `anggota`       |
+| `/consultations/:id`   | all      | one consultation: status banner, negotiation, approve, reschedule, complete   |
+| `/folders/:id?versi=…` | all      | one folder: versions, feedback and revision checklist per version             |
+| `/undangan`            | student  | invitations to accept or decline                                              |
+| `/jadwal`              | lecturer | Hari Berhalangan (blackout dates)                                             |
+| `/monitoring`          | lecturer | every supervised student with meetings, open revisions and deadlines          |
 
 ## Code
 
@@ -53,4 +49,3 @@ src/
 - **Forms** check the same limits as the API DTOs before sending (lengths, time windows, deadlines, file type and
   50 MB), so most mistakes never reach the API; errors that do come back are shown as one-line toasts with the
   API's message.
-- [`unused-endpoints.md`](unused-endpoints.md) lists the API routes the app does not call (only `GET /health`).
